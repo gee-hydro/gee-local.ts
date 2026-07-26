@@ -65,5 +65,6 @@ test/                 离线单测
 - GEE 包 `require` 须带 `.js`（Code Editor 语法）；`users/x/y:mod.js` → `packages/users/x/y/mod.js`
 - packages 路径优先级：`--package-path` > `$GEE_JS_PATH` > config > `./packages`
 - 不把 server 数据源注册表引入本包；CLI 使用 collection/band/scale/temporal
+- 数据本地导出优先使用 `/mnt/z/GitHub/gee-hydro/gee-export`，其效率更高
 - 修改公共 API、CLI 参数或 job manifest 时同步更新 README 与测试
 - 不提交 `package-lock.json`（CI 用 `npm install`）
