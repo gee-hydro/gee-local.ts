@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -9,6 +10,8 @@ const moduleSource = readFileSync(modulePath, 'utf8');
 const offlineHome = '/offline-home';
 const credentialsPath = `${offlineHome}/.config/earthengine/credentials`;
 const privateKeyPath = `${offlineHome}/.config/earthengine/.private-key.json`;
+const cacheDir = `${offlineHome}/.cache/gee-helper`;
+const tokenCachePath = `${cacheDir}/access-token.json`;
 
 type EeInitModule = {
   ensureReady(): Promise<void>;
@@ -18,6 +21,10 @@ type EeInitModule = {
 type FakeFs = {
   existsSync(path: string): boolean;
   readFileSync(path: string, encoding: string): string;
+  mkdirSync?(path: string, options: { recursive: boolean; mode: number }): void;
+  writeFileSync?(path: string, data: string, options: { mode: number }): void;
+  renameSync?(from: string, to: string): void;
+  unlinkSync?(path: string): void;
 };
 
 type LoadOptions = {
@@ -30,6 +37,7 @@ type LoadOptions = {
 function loadAuth(options: LoadOptions): EeInitModule {
   const module = { exports: {} as Record<string, unknown> };
   const fakeRequire = (id: string): unknown => {
+    if (id === 'node:crypto') return { createHash };
     if (id === 'node:fs') return options.fs;
     if (id === './ee') return { ee: options.ee };
     if (id === 'google-auth-library') return { OAuth2Client: options.OAuth2Client };
@@ -39,7 +47,7 @@ function loadAuth(options: LoadOptions): EeInitModule {
   const context = vm.createContext({
     console: { log: () => undefined },
     Error,
-    process: { env: { HOME: offlineHome }, platform: 'linux' },
+    process: { env: { HOME: offlineHome }, pid: 123, platform: 'linux' },
   });
   const wrapper = vm.runInContext(
     `(function (exports, require, module, __filename, __dirname) {${moduleSource}\n})`,
@@ -176,18 +184,36 @@ test('OAuth credentials 安装 token refresher、设置 auth token 并完成 ini
       queueMicrotask(success);
     },
   };
-  const auth = loadAuth({
-    fs: {
-      existsSync: (path) => path === credentialsPath,
-      readFileSync: (path, encoding) => {
-        assert.equal(path, credentialsPath);
-        assert.equal(encoding, 'utf8');
-        return JSON.stringify(credentials);
-      },
+  const files = new Map([[credentialsPath, JSON.stringify(credentials)]]);
+  let cacheDirMode: number | undefined;
+  let cacheFileMode: number | undefined;
+  const fs: FakeFs = {
+    existsSync: (path) => files.has(path),
+    readFileSync: (path, encoding) => {
+      assert.equal(encoding, 'utf8');
+      const value = files.get(path);
+      if (value == null) throw new Error(`missing file: ${path}`);
+      return value;
     },
-    ee,
-    OAuth2Client: FakeOAuth2Client,
-  });
+    mkdirSync: (path, options) => {
+      assert.equal(path, cacheDir);
+      cacheDirMode = options.mode;
+    },
+    writeFileSync: (path, data, options) => {
+      files.set(path, data);
+      cacheFileMode = options.mode;
+    },
+    renameSync: (from, to) => {
+      const value = files.get(from);
+      if (value == null) throw new Error(`missing file: ${from}`);
+      files.set(to, value);
+      files.delete(from);
+    },
+    unlinkSync: (path) => {
+      files.delete(path);
+    },
+  };
+  const auth = loadAuth({ fs, ee, OAuth2Client: FakeOAuth2Client });
 
   await auth.ensureReady();
 
@@ -209,6 +235,11 @@ test('OAuth credentials 安装 token refresher、设置 auth token 并完成 ini
   assert.equal(setAuthTokenArgs?.[6], false);
   assert.equal(initializedProject, credentials.project);
   assert.equal(typeof refresher, 'function');
+  assert.equal(cacheDirMode, 0o700);
+  assert.equal(cacheFileMode, 0o600);
+  const initialCache = JSON.parse(files.get(tokenCachePath) ?? '{}');
+  assert.equal(initialCache.access_token, 'initial-access-token');
+  assert.equal(initialCache.credential_id.length, 64);
 
   const refreshedToken = await new Promise<Record<string, unknown>>((resolveToken) => {
     refresher?.({}, resolveToken);
@@ -217,6 +248,17 @@ test('OAuth credentials 安装 token refresher、设置 auth token 并完成 ini
   assert.equal(refreshedToken.token_type, 'Bearer');
   assert.equal(refreshedToken.expires_in, 1800);
   assert.equal(client.accessTokenCalls, 2);
+  const refreshedCache = JSON.parse(files.get(tokenCachePath) ?? '{}');
+  assert.equal(refreshedCache.access_token, 'refreshed-access-token');
+
+  setAuthTokenArgs = undefined;
+  const cachedAuth = loadAuth({ fs, ee, OAuth2Client: FakeOAuth2Client });
+  await cachedAuth.ensureReady();
+
+  assert.equal(oauthInstances.length, 2);
+  assert.equal(oauthInstances[1].accessTokenCalls, 0);
+  assert.equal(setAuthTokenArgs?.[2], 'refreshed-access-token');
+  assert.ok(Number(setAuthTokenArgs?.[3]) > 1700);
 });
 
 test('initialize 失败后清空 readyPromise，下一次 ensureReady 会重试', async () => {

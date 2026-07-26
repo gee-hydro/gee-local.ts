@@ -5,6 +5,7 @@
  * 优先 service-account（~/.config/earthengine/.private-key.json）
  * 否则 OAuth refresh-token（~/.config/earthengine/credentials）
  */
+const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const { ee } = require('./ee');
 const { OAuth2Client } = require('google-auth-library');
@@ -12,14 +13,65 @@ const { OAuth2Client } = require('google-auth-library');
 const HOME = process.env[process.platform === 'win32' ? 'USERPROFILE' : 'HOME'];
 const CREDENTIALS = `${HOME}/.config/earthengine/credentials`;
 const PRIVATE_KEY = `${HOME}/.config/earthengine/.private-key.json`;
+const CACHE_DIR = `${process.env.XDG_CACHE_HOME || `${HOME}/.cache`}/gee-helper`;
+const TOKEN_CACHE = `${CACHE_DIR}/access-token.json`;
+const EXPIRY_SKEW_MS = 60_000;
 /** earthengine CLI 默认 OAuth client（与 `earthengine authenticate` 一致） */
 const EE_CLIENT_ID = '517222506229-vsmmajv00ul0bs7p89v5m89qs8eb9359.apps.googleusercontent.com';
 const EE_CLIENT_SECRET = 'RUP0RZ6e0pPhDzsqIJ7KlNd1';
 
 let readyPromise = null;
 
+function credentialId(credentials, clientId) {
+  return createHash('sha256')
+    .update(`${clientId}\0${credentials.project || ''}\0${credentials.refresh_token || ''}`)
+    .digest('hex');
+}
+
+function readTokenCache(id) {
+  try {
+    if (!fs.existsSync(TOKEN_CACHE)) return null;
+    const cache = JSON.parse(fs.readFileSync(TOKEN_CACHE, 'utf8'));
+    const expiresIn = Math.floor((Number(cache.expires_at) - Date.now()) / 1000);
+    if (cache.credential_id !== id || typeof cache.access_token !== 'string' ||
+        expiresIn * 1000 <= EXPIRY_SKEW_MS) return null;
+    return { token: cache.access_token, expiresIn };
+  } catch {
+    return null;
+  }
+}
+
+function writeTokenCache(id, token, expiresIn) {
+  const tmp = `${TOKEN_CACHE}.${process.pid}.tmp`;
+  try {
+    fs.mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(tmp, `${JSON.stringify({
+      credential_id: id,
+      access_token: token,
+      expires_at: Date.now() + expiresIn * 1000,
+    })}\n`, { mode: 0o600 });
+    fs.renameSync(tmp, TOKEN_CACHE);
+  } catch {
+    try { fs.unlinkSync(tmp); } catch { /* 缓存失败不影响鉴权 */ }
+  }
+}
+
+function tokenLifetime(response) {
+  const expiresIn = Number(response?.data?.expires_in);
+  return Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600;
+}
+
+async function refreshToken(client, id) {
+  const { token, res } = await client.getAccessToken();
+  if (!token) throw new Error('empty access_token');
+  const expiresIn = tokenLifetime(res);
+  writeTokenCache(id, token, expiresIn);
+  return { token, expiresIn };
+}
+
 /**
- * 初始化 GEE。失败清空缓存，允许下次请求重试。
+ * 初始化 GEE。失败清空内存缓存，允许下次请求重试。
+ * OAuth access token 跨进程缓存至 $XDG_CACHE_HOME/gee-helper。
  * @returns {Promise<void>}
  */
 function ensureReady() {
@@ -55,37 +107,27 @@ function ensureReady() {
       o2.client_secret || EE_CLIENT_SECRET,
     );
     client.setCredentials({ refresh_token: o2.refresh_token });
+    const id = credentialId(o2, clientId);
 
     // Node 无 GIS 弹窗；须自带 refresher，否则 access_token ~1h 过期后 getMap 报 missing credential
     ee.data.setAuthTokenRefresher((_authArgs, callback) => {
-      client.getAccessToken()
-        .then(({ token, res }) => {
-          if (!token) {
-            callback({ error: 'refresh: empty access_token' });
-            return;
-          }
-          const expiresIn = Number(res?.data?.expires_in);
-          callback({
-            access_token: token,
-            token_type: 'Bearer',
-            expires_in: Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600,
-          });
-        })
-        .catch((e) => callback({ error: `refresh_token: ${e}` }));
+      refreshToken(client, id)
+        .then(({ token, expiresIn }) => callback({
+          access_token: token,
+          token_type: 'Bearer',
+          expires_in: expiresIn,
+        }))
+        .catch((e) => callback({ error: `refresh_token: ${e.message || e}` }));
     });
 
-    client.getAccessToken()
-      .then(({ token, res }) => {
-        if (!token) {
-          fail(new Error('refresh_token: empty access_token'));
-          return;
-        }
-        const expiresIn = Number(res?.data?.expires_in);
+    const cached = readTokenCache(id);
+    (cached ? Promise.resolve(cached) : refreshToken(client, id))
+      .then(({ token, expiresIn }) => {
         ee.apiclient.setAuthToken(
           clientId,
           'Bearer',
           token,
-          Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600,
+          expiresIn,
           [],
           undefined,
           false,
@@ -95,7 +137,7 @@ function ensureReady() {
           (e) => fail(new Error(`ee.initialize: ${e}`)),
           null, o2.project);
       })
-      .catch((e) => fail(new Error(`refresh_token: ${e}`)));
+      .catch((e) => fail(new Error(`refresh_token: ${e.message || e}`)));
   });
   return readyPromise;
 }

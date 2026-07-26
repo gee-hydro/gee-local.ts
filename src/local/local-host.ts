@@ -151,6 +151,7 @@ export function setupLocalHost(opts: LocalHostOptions = {}): LocalHost {
     const task = { type: kind, ...params };
     host.tasks.push(task);
     if (echo) console.log(`[Export.${kind}] ${String(params.description ?? params.assetId ?? '')}`);
+    return task;
   };
   g.Export = {
     image: {
@@ -199,6 +200,7 @@ export function setupLocalHost(opts: LocalHostOptions = {}): LocalHost {
     },
   });
   g.Chart = chartNs;
+  g.ui = { Chart: chartNs };
 
   g._host = host;
   return host;

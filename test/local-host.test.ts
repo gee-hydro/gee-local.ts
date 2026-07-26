@@ -8,7 +8,7 @@ import { runInScriptContext, setupLocalHost } from '../src/local/local-host';
 
 beforeEach(() => {
   // 清除宿主全局，避免上一次测试污染
-  for (const k of ['print', 'Map', 'Export', 'Chart', '_host']) {
+  for (const k of ['print', 'Map', 'Export', 'Chart', 'ui', '_host']) {
     delete (globalThis as Record<string, unknown>)[k];
   }
 });
@@ -20,6 +20,7 @@ test('setupLocalHost 安装宿主全局 + _host', () => {
   assert.equal(typeof globalThis.Map, 'function');
   assert.equal(typeof globalThis.Export, 'object');
   assert.equal(typeof globalThis.Chart, 'object');
+  assert.equal(typeof (globalThis as Record<string, unknown>).ui, 'object');
   assert.equal((globalThis as Record<string, unknown>)._host, host);
   assert.equal(host.print.length, 0);
   assert.equal(host.layers.length, 0);
@@ -86,10 +87,11 @@ test('Export.image.toDrive / toAsset / toCloudStorage 全捕获', () => {
   const host = setupLocalHost({ echo: false });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Export: any = (globalThis as any).Export;
-  Export.image.toDrive({ image: 'i', description: 't1', scale: 100 });
+  const task = Export.image.toDrive({ image: 'i', description: 't1', scale: 100 });
   Export.image.toAsset({ image: 'i', assetId: 'users/me/t1' });
   Export.image.toCloudStorage({ image: 'i', bucket: 'b', fileNamePrefix: 'p' });
   Export.table.toDrive({ collection: 'c', description: 't2' });
+  assert.equal(task, host.tasks[0]);
   assert.equal(host.tasks.length, 4);
   assert.deepEqual(host.tasks.map((t) => t.type), [
     'image.toDrive', 'image.toAsset', 'image.toCloudStorage', 'table.toDrive',
@@ -109,13 +111,13 @@ test('Chart.* 二级代理 + 链式占位', () => {
   assert.deepEqual(info, { chartType: 'image.series' });
 });
 
-test('Chart 各子命名空间独立捕获', () => {
+test('Chart / ui.Chart 共享捕获', () => {
   const host = setupLocalHost({ echo: false });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const Chart: any = (globalThis as any).Chart;
+  const { Chart, ui }: any = globalThis;
   Chart.image.series({});
   Chart.feature.byFeature({});
-  Chart.array.values({});
+  ui.Chart.array.values({});
   assert.deepEqual(host.charts.map((c) => c.type), ['image.series', 'feature.byFeature', 'array.values']);
 });
 

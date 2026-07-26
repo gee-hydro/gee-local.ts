@@ -14,6 +14,7 @@ npm install && npm run build
 **Auth**
 - `~/.config/earthengine/.private-key.json`
 - `earthengine authenticate`（OAuth）
+- OAuth access token 缓存于 `${XDG_CACHE_HOME:-~/.cache}/gee-helper/access-token.json`（权限 `600`）
 
 ## CLI
 
@@ -53,7 +54,15 @@ ee --repl
 ee --package-path ./packages script.js
 ```
 
-注入 `ee` / `print` / `Map` / `Export` / `Chart`，以及 Code Editor 风格 `require`（路径须带 `.js`）。
+注入 `ee` / `print` / `Map` / `Export` / `Chart` / `ui.Chart`，以及 Code Editor 风格 `require`（路径须带 `.js`）。
+
+网页端与本地可共用同一入口：
+
+```js
+var pkg = require('users/kongdd/pkg:pkg.js');
+```
+
+`pkg_main`、`pkg_extract`、`pkg_export`、`pkg_index`、`pkg_CMRSET` 可直接共用；`src/` 为旧 Node 宿主，`untest/` 依赖已迁移仓库，不纳入兼容层。
 
 ### 包管理
 
