@@ -38,15 +38,18 @@ node bin/ee submit --dry-run \
 src/
   ee.js / auth.js     唯一 EE 实例；鉴权 + getInfo
   export/             batches / tasks / frame-collection / bounds
+  data/               本地 catalog / 日期范围筛选 / Julia worker
   local/              local-host / gee-require / pkg-add / config
   cli/
     index.ts          入口；按命令 require 懒加载（help 不拉 EE）
     args.ts           参数解析 + HELP
     export.ts         submit / status / list / jobs / cancel
+    data.ts           data ls|query|crop|ops（不拉 EE）
     run.ts            run / repl
     pkg.ts            config / add（轻量）
   cli.ts              re-export → dist/cli.js（bin/ee 入口）
   index.ts            公共 API
+julia/                SpatialRasterLite JSON-Lines worker
 packages/             GEE JS 包根（require 须带 .js）
 examples/             可运行示例
 test/                 离线单测
@@ -61,7 +64,10 @@ test/                 离线单测
 - 凭证优先级：private key → Earth Engine OAuth credentials
 - 导出时间区间为闭区间；native 模式必须显式提供正 `stepHours`
 - `local-host` 修改后须验证内置 `Map` 构造器兼容性及全局清理
-- CLI 入口保持懒加载：`help` / `config` / `add` 不得静态依赖 EE
+- CLI 入口保持懒加载：`help` / `config` / `add` / `data` 不得静态依赖 EE
+- 本地数据注册：`ee data register` → `catalog/local.json`；格式 `tif`（SpatialRasterLite/ArchGDAL）与 `nc`（NCDatasets 三维时空）
+- 本地处理：`julia/gee_local_worker.jl`；用户函数 `apply(ra::SpatRaster; params...)`，`ra.A` 为 2D/3D
+- 自定义指标写 `.jl` 后 `ee data apply --fn ...`
 - GEE 包 `require` 须带 `.js`（Code Editor 语法）；`users/x/y:mod.js` → `packages/users/x/y/mod.js`
 - packages 路径优先级：`--package-path` > `$GEE_JS_PATH` > config > `./packages`
 - 不把 server 数据源注册表引入本包；CLI 使用 collection/band/scale/temporal

@@ -18,6 +18,7 @@ function load(cmd: Cli['cmd']): Handler {
     case 'run': return require('./run').cmdRun;
     case 'add': return require('./pkg').cmdAdd;
     case 'config': return require('./pkg').cmdConfig;
+    case 'data': return require('./data').cmdData;
     default: throw new Error(`unknown cmd: ${cmd}`);
   }
 }

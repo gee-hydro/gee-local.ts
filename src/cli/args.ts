@@ -9,7 +9,7 @@ import type { GeeDailyReduction, GeeTemporal } from '../types';
 export type CliDestination = 'local' | TaskDestination;
 export type Cmd =
   | 'submit' | 'status' | 'list' | 'jobs' | 'cancel'
-  | 'run' | 'add' | 'config' | 'help';
+  | 'run' | 'add' | 'config' | 'data' | 'help';
 
 export interface Cli {
   cmd: Cmd;
@@ -43,6 +43,24 @@ export interface Cli {
   configArgs: string[];
   configScope: ConfigScope;
   addSpecs: string[];
+  /** ee data <sub> ... */
+  dataArgs: string[];
+  root?: string;
+  /** catalog.json 路径 */
+  catalog?: string;
+  /** 注册数据集 id */
+  id?: string;
+  /** 注册数据路径 */
+  path?: string;
+  /** tif | nc */
+  format?: string;
+  /** Julia 用户函数文件 */
+  fn?: string;
+  fnName?: string;
+  /** stack | each */
+  mode?: string;
+  /** JSON object string */
+  paramsJson?: string;
 }
 
 export const HELP = `
@@ -57,6 +75,7 @@ export const HELP = `
   run                 本地运行 GEE JS
   add                 安装 GEE 脚本包
   config              读写配置
+  data                本地数据（筛选 + Julia apply/crop）
   help, -h            显示本帮助
 
 导出  ee submit
@@ -81,12 +100,25 @@ export const HELP = `
         ee config show|get|set|path
         ee config set packages <dir> [--user|--project]
 
+本地数据  ee data register|unregister|ls|query|crop|apply|ops
+  注册  --id <name> --path <file|dir> [--format tif|nc] [--band var]
+        [--catalog catalog/local.json] [--start --end --bounds]
+        # tif: SpatialRasterLite；nc: 三维时空 (lon,lat,time)
+  卸载  --id <name> [--catalog ...]
+  查询  --catalog and/or --root（sidecar 目录）
+  筛选  --start --end --bounds --collection --band --id
+  crop  --outdir --bounds ...
+  apply --fn <file.jl> [--fn-name apply] [--mode stack|each]
+        [--params '{...}'] [--outdir dir]
+        # apply(ra::SpatRaster; params...)；ra.A 为 2D 或 3D
+
 包路径优先级  --package-path > $GEE_JS_PATH > config > ./packages
 require 须带 .js 后缀（Code Editor 语法）
 `.trimStart();
 
 const CMDS = new Set<string>([
-  'submit', 'status', 'list', 'jobs', 'cancel', 'run', 'add', 'config', 'help', '-h', '--help',
+  'submit', 'status', 'list', 'jobs', 'cancel', 'run', 'add', 'config', 'data',
+  'help', '-h', '--help',
 ]);
 
 function num(flag: string, raw: string, opts: { min?: number; max?: number; int?: boolean } = {}): number {
@@ -103,6 +135,7 @@ export function parseArgs(argv: string[]): Cli {
     cmd: 'help', bucket: 'auto', destination: 'drive',
     concurrency: 1, limit: 20, dryRun: false, scripts: [], repl: false,
     packagePaths: [], configArgs: [], configScope: 'project', addSpecs: [],
+    dataArgs: [],
   };
   if (argv.length === 0) return cli;
 
@@ -127,6 +160,45 @@ export function parseArgs(argv: string[]): Cli {
     for (const a of argv) {
       if (a.startsWith('-')) throw new Error(`未知参数: ${a}`);
       cli.addSpecs.push(a);
+    }
+    return cli;
+  }
+  if (cli.cmd === 'data') {
+    // 子命令 + 与导出共用的筛选旗标
+    for (let i = 0; i < argv.length; i++) {
+      const a = argv[i]!;
+      const next = (): string => {
+        const v = argv[++i];
+        if (v == null) throw new Error(`参数 ${a} 缺值`);
+        return v;
+      };
+      if (!a.startsWith('-')) { cli.dataArgs.push(a); continue; }
+      switch (a) {
+        case '--root': cli.root = next(); break;
+        case '--catalog': cli.catalog = next(); break;
+        case '--id': cli.id = next(); break;
+        case '--path': cli.path = next(); break;
+        case '--format': cli.format = next(); break;
+        case '--start': cli.start = next(); break;
+        case '--end': cli.end = next(); break;
+        case '--collection': cli.collection = next(); break;
+        case '--band': cli.band = next(); break;
+        case '--outdir': case '--cache-dir': cli.outdir = next(); break;
+        case '--fn': cli.fn = next(); break;
+        case '--fn-name': cli.fnName = next(); break;
+        case '--mode': cli.mode = next(); break;
+        case '--params': cli.paramsJson = next(); break;
+        case '--bounds': {
+          const v = next().split(',').map((s) => Number(s.trim()));
+          if (v.length !== 4 || v.some((x) => !Number.isFinite(x))) {
+            throw new Error('--bounds 须为 west,south,east,north');
+          }
+          cli.bounds = v as [number, number, number, number];
+          break;
+        }
+        case '-h': case '--help': cli.cmd = 'help'; break;
+        default: throw new Error(`未知参数: ${a}`);
+      }
     }
     return cli;
   }

@@ -1,0 +1,6 @@
+[deps]
+ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+NaNStatistics = "b946abbf-3ea7-4610-9019-9858bfdeaf2d"
+SpatialRasterLite = "25a4c9b9-c310-4d6e-b9a7-fa79274760a1"
