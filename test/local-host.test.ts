@@ -4,7 +4,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as vm from 'node:vm';
-import { runInScriptContext, setupLocalHost } from '../src/local/local-host';
+import { runCode, runInScriptContext, setupLocalHost } from '../src/local/local-host';
 
 beforeEach(() => {
   // 清除宿主全局，避免上一次测试污染
@@ -161,6 +161,16 @@ test('runInScriptContext 注入 require/module/__dirname 且执行后还原', ()
   // 还原，不污染全局
   assert.equal(g.require, undefined);
   assert.equal(g.__filename, undefined);
+});
+
+test('runCode 传播 pendingPrints 异步失败', async () => {
+  await assert.rejects(
+    runCode(
+      `_host.pendingPrints.push(Promise.reject(new Error('async failed')));`,
+      { ready: true, echo: false },
+    ),
+    /async failed/,
+  );
 });
 
 test('多次调用 setupLocalHost 替换宿主（清空旧 capture）', () => {

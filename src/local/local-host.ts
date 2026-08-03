@@ -267,7 +267,7 @@ async function runScriptBody(absPath: string, code: string, opts: RunScriptOptio
   const host = setupLocalHost(opts);
   if (!opts.ready) await ensureReady();
   runInScriptContext(code, absPath, opts);
-  await Promise.all(host.pendingPrints.map((p) => p.catch(() => {})));
+  await Promise.all(host.pendingPrints);
   return host;
 }
 
@@ -293,6 +293,6 @@ export async function runCode(code: string, opts: RunScriptOptions = {}): Promis
   const host = setupLocalHost(opts);
   if (!opts.ready) await ensureReady();
   runInScriptContext(code, path.join(process.cwd(), '.<gee-inline>.js'), opts);
-  await Promise.all(host.pendingPrints.map((p) => p.catch(() => {})));
+  await Promise.all(host.pendingPrints);
   return host;
 }

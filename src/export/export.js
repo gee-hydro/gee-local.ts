@@ -1,0 +1,176 @@
+var fs = require('node:fs');
+var path = require('node:path');
+var taskInfo = require('./taskInfo.js');
+var tile = require('./export-tile.js');
+var util = require('./utilize.js');
+
+function getDownloadParams(name, group, region, options) {
+  if (options.getDownloadParams) {
+    return options.getDownloadParams(name, group, region, options);
+  }
+  return {
+    name: name,
+    region: region,
+    format: options.format || 'GEO_TIFF',
+    filePerBand: options.filePerBand || false,
+  };
+}
+
+async function downloadFile(image, params, filename, group, options, host) {
+  var retries = options.retries == null ? 5 : Number(options.retries);
+  var lastError = '';
+  for (var attempt = 0; attempt < retries; attempt += 1) {
+    var url = await host.getDownloadUrl(image, params);
+    var response = await (options.fetch || fetch)(url);
+    if (response.ok) {
+      fs.mkdirSync(path.dirname(filename), { recursive: true });
+      fs.writeFileSync(filename, Buffer.from(await response.arrayBuffer()));
+      return filename;
+    }
+
+    lastError = typeof response.text === 'function'
+      ? await response.text()
+      : 'HTTP ' + response.status;
+    if (response.status !== 429 && response.status !== 503) break;
+    await new Promise(function (resolve) {
+      setTimeout(resolve, 2000 * Math.pow(2, attempt));
+    });
+  }
+  throw new Error('下载失败：' + group.key + ': ' + lastError);
+}
+
+async function export_img(group, position, total, options) {
+  var name = group.name;
+  var filename = options.getFilename
+    ? options.getFilename(name, group, options)
+    : path.join(options.outdir, name + (options.extension || '.tif'));
+  if (fs.existsSync(filename)) {
+    util.log(options, '[' + position + '/' + total + '] 跳过：' + path.basename(filename));
+    return filename;
+  }
+
+  var host = globalThis._host;
+  if (!host || !host.getDownloadUrl) {
+    throw new Error('getDownloadUrl 仅在 gee-helper 本地运行时可用');
+  }
+  var source;
+  if (options.getSource) {
+    source = options.getSource(group, options);
+  } else {
+    var ee = globalThis.ee;
+    if (!ee || !ee.Filter) {
+      throw new Error('默认数据源筛选仅在 gee-helper 本地运行时可用');
+    }
+    source = options.collection.filter(ee.Filter.inList(
+      options.indexProperty || 'system:index',
+      group.indices,
+    ));
+  }
+  var image = options.buildImage(source, options.buildImageOptions);
+
+  if (!options.tiling) {
+    var params = getDownloadParams(name, group, options.region, options);
+    await downloadFile(image, params, filename, group, options, host);
+  } else {
+    await tile.exportTiles({
+      image,
+      filename,
+      group,
+      options,
+      host,
+      downloadFile,
+      getDownloadParams,
+    });
+  }
+
+  util.log(options, '[' + position + '/' + total + '] 完成：' + path.basename(filename));
+  return filename;
+}
+
+
+async function exportCollection(options) {
+  var concurrency = options.concurrency == null ? 4 : Number(options.concurrency);
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error('concurrency 须为正整数');
+  }
+
+  var period = options.period || '1d';
+  var parsedPeriod = util.parsePeriod(period);
+  var maxGroups = options.maxGroups == null ? -1 : Number(options.maxGroups);
+  if (!Number.isInteger(maxGroups) || maxGroups < -1) {
+    throw new Error('maxGroups 须为 -1 或非负整数');
+  }
+  var pending = [
+    util.evaluate(options.collection.aggregate_array(
+      options.indexProperty || 'system:index',
+    )),
+    util.evaluate(options.collection.aggregate_array(
+      options.timeProperty || 'system:time_start',
+    )),
+  ];
+  if (options.sceneRecord) {
+    pending.push(taskInfo.export_taskInfo(
+      options.collection,
+      options.sceneRecord.filename,
+      options.sceneRecord.properties,
+      options.log === false ? null : options.log || console.log,
+    ));
+  }
+
+  var values = await Promise.all(pending);
+  var groups = util.split_group(
+    values[0],
+    values[1],
+    parsedPeriod,
+    options.prefix,
+    options.suffixPattern,
+  );
+  if (maxGroups >= 0) groups = groups.slice(0, maxGroups);
+
+  var workerCount = Math.min(concurrency, groups.length);
+  util.log(
+    options,
+    '时段数：' + groups.length + '；周期：' + period + '；并发：' + workerCount,
+  );
+
+  var cursor = 0;
+  var exportImage = options.exportImage || export_img;
+  async function worker() {
+    while (cursor < groups.length) {
+      var index = cursor;
+      cursor += 1;
+      await exportImage(
+        groups[index],
+        index + 1,
+        groups.length,
+        options,
+      );
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  util.log(options, '下载完成：' + options.outdir);
+}
+
+function export_col(options) {
+  var host = globalThis._host;
+  if (typeof globalThis.print === 'function') {
+    globalThis.print('原始影像数：', options.collection.size());
+  }
+
+  var promise = exportCollection(options);
+  if (!host) return promise;
+
+  var registered = promise.catch(function (error) {
+    console.error('下载失败：', error.message || error);
+    process.exitCode = 1;
+    throw error;
+  });
+  host.pendingPrints.push(registered);
+  return registered;
+}
+
+module.exports = {
+  export_img,
+  export_col,
+};

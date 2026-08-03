@@ -17,6 +17,7 @@ var collection = ee.ImageCollection('OPERA/DSWX/L3_V1/HLS')
   .filterBounds(region)
   .filterDate('2020-01-01', '2027-01-01')
   .filter(ee.Filter.calendarRange(6, 8, 'month'))
+  .filter(ee.Filter.lt('CLOUD_COVERAGE', 20))
   .sort('system:time_start');
 
 function aggWater_HLS(images, options) {
@@ -46,50 +47,35 @@ function aggWater_HLS(images, options) {
 
 /** 本地 gee-helper */
 var path = require('node:path');
-var localExport = require('users/kongdd/pkg:export.js');
+var localExport = require('../src/export/export.js');
 
-function groupScenes(indices) {
-  var groups = {};
-  indices.forEach(function (index) {
-    var match = index.match(/_(\d{8})T\d{6}Z_.*_([^_]+)$/);
-    var key = match ? match[1] + '_' + match[2] : index;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(index);
-  });
-  return Object.keys(groups).map(function (key) {
-    return { key: key, indices: groups[key] };
-  });
+var outdir = path.join(__dirname, 'data', 'surface_water_2020-2026_JJA_90m');
+
+var taskInfo = {
+  filename: path.join(outdir, 'DSWX_scenes_cloud_lt20.csv'),
+  properties: [
+    'system:index',
+    'system:time_start',
+    'SENSOR',
+    'SPACECRAFT_NAME',
+    'CLOUD_COVERAGE',
+    'INPUT_HLS_PRODUCT_CLOUD_COVERAGE',
+  ],
 }
 
-function getName(group) {
-  return 'DSWX_water_fraction_' + group.key.replace(/[^A-Za-z0-9._-]+/g, '_');
-}
-
-function getSource(group, options) {
-  return options.collection.filter(
-    ee.Filter.inList('system:index', group.indices),
-  );
-}
-
-var outputDir = path.join(__dirname, 'data', 'surface_water_2020-2026_JJA_90m');
-var localOptions = {
+localExport.export_col({
   region: region,
   collection: collection,
-  outputDir: outputDir,
-  maxScenes: Number(process.env.MAX_SCENES || 0),
-  concurrency: Number(process.env.CONCURRENCY || 4),
-  summary: '2020—2026 年 6—8 月原始瓦片数：',
-  groupLabel: '逐景文件数',
-  groupScenes: groupScenes,
-  getName: getName,
-  getSource: getSource,
+  outdir: outdir,
+  maxGroups: Number(process.env.MAX_GROUPS || -1),
+  concurrency: 4,
+  period: '1d',
+  prefix: 'DSWX_water_fraction_',
+  suffixPattern: /_([^_]+)$/,
+  sceneRecord: taskInfo,
   buildImage: aggWater_HLS,
   buildImageOptions: {
     targetRegion: region,
     targetTransform: gridTransform,
   },
-  getDownloadUrl: _host.getDownloadUrl,
-  host: _host,
-};
-
-localExport.export_col(localOptions);
+});
