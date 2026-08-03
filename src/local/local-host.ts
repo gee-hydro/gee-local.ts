@@ -7,6 +7,8 @@ import * as path from 'node:path';
 import * as vm from 'node:vm';
 import { ensureReady, getInfo } from '../auth';
 import { ee } from '../ee';
+import { getDownloadUrl } from './download';
+import { gdalWarp } from './gdal';
 import { mergePackagePaths, withGeePackageRequire } from './gee-require';
 
 const ORIG_MAP_CTOR: MapConstructor | undefined = globalThis.Map;
@@ -28,6 +30,8 @@ export interface LocalHost {
   tasks: TaskSpec[];
   charts: TaskSpec[];
   pendingPrints: Promise<void>[];
+  getDownloadUrl: typeof getDownloadUrl;
+  gdalWarp: (args: readonly string[]) => void;
 }
 
 export interface LocalHostOptions {
@@ -98,7 +102,15 @@ async function evalToPlain(v: unknown, depth = 0, seen: WeakSet<object> = new We
 
 export function setupLocalHost(opts: LocalHostOptions = {}): LocalHost {
   const echo = opts.echo ?? true;
-  const host: LocalHost = { print: [], layers: [], tasks: [], charts: [], pendingPrints: [] };
+  const host: LocalHost = {
+    print: [],
+    layers: [],
+    tasks: [],
+    charts: [],
+    pendingPrints: [],
+    getDownloadUrl,
+    gdalWarp,
+  };
   const g = globalThis as Record<string, unknown>;
 
   g.ee = ee;

@@ -6,9 +6,20 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+export interface GdalConfig {
+  /** gdalwarp 可执行文件 */
+  command?: string;
+  /** PROJ 数据目录；同时设置 PROJ_DATA 与 PROJ_LIB */
+  projData?: string;
+  /** GeoTIFF SRS 来源，例如 EPSG */
+  gtiffSrsSource?: string;
+}
+
 export interface GeeHelperConfig {
   /** GEE JS 包根目录（字符串或数组） */
   packages?: string | string[];
+  /** 本地 GDAL 配置 */
+  gdal?: GdalConfig;
 }
 
 export type ConfigScope = 'user' | 'project';

@@ -45,6 +45,7 @@ export {
   saveConfig,
   userConfigPath,
   type ConfigScope,
+  type GdalConfig,
   type GeeHelperConfig,
 } from './local/config';
 export {

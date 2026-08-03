@@ -21,6 +21,8 @@ test('setupLocalHost 安装宿主全局 + _host', () => {
   assert.equal(typeof globalThis.Export, 'object');
   assert.equal(typeof globalThis.Chart, 'object');
   assert.equal(typeof (globalThis as Record<string, unknown>).ui, 'object');
+  assert.equal(typeof host.getDownloadUrl, 'function');
+  assert.equal(typeof host.gdalWarp, 'function');
   assert.equal((globalThis as Record<string, unknown>)._host, host);
   assert.equal(host.print.length, 0);
   assert.equal(host.layers.length, 0);

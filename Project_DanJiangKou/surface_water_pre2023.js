@@ -2,21 +2,16 @@
 // OPERA DSWx-HLS 始于2023年；此前数据使用同源Sentinel-2的Dynamic World补充。
 // https://developers.google.com/earth-engine/datasets/catalog/GOOGLE_DYNAMICWORLD_V1
 
-var fs = require('node:fs');
-var path = require('node:path');
-var childProcess = require('node:child_process');
-
-if (fs.existsSync('/usr/share/proj/proj.db')) {
-  process.env.PROJ_DATA = '/usr/share/proj';
-  process.env.PROJ_LIB = '/usr/share/proj';
-  process.env.GTIFF_SRS_SOURCE = 'EPSG';
-}
-
+/** GEE JavaScript */
 var region = ee.Geometry.Rectangle(
   [110.67, 32.42, 111.73, 33.07],
   'EPSG:4326',
   false,
 );
+var startYear = 2020;
+var endYear = 2022;
+var waterThreshold = 0.5;
+var landThreshold = 0.2;
 var gridWidth = 1273;
 var gridHeight = 781;
 var gridBounds = [
@@ -36,52 +31,40 @@ for (var row = 0; row < 2; row += 1) {
     tileRegions.push(ee.Geometry.Rectangle([x0, y0, x1, y1], 'EPSG:4326', false));
   }
 }
-var startYear = Number(process.env.START_YEAR || 2020);
-var endYear = Number(process.env.END_YEAR || 2022);
-var outputDir = process.env.OUTPUT_DIR || path.join(
-  __dirname,
-  'data',
-  'surface_water_' + startYear + '-' + endYear + '_JJA_90m_dynamic_world',
-);
-var maxScenes = Number(process.env.MAX_SCENES || 0);
-var waterThreshold = Number(process.env.WATER_THRESHOLD || 0.5);
-var landThreshold = Number(process.env.LAND_THRESHOLD || 0.2);
 
-fs.mkdirSync(outputDir, { recursive: true });
+function getCollection(targetRegion, firstYear, lastYear) {
+  return ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1')
+    .filterBounds(targetRegion)
+    .filterDate(String(firstYear) + '-01-01', String(lastYear + 1) + '-01-01')
+    .filter(ee.Filter.calendarRange(6, 8, 'month'))
+    .sort('system:time_start');
+}
 
-var collection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1')
-  .filterBounds(region)
-  .filterDate(String(startYear) + '-01-01', String(endYear + 1) + '-01-01')
-  .filter(ee.Filter.calendarRange(6, 8, 'month'))
-  .sort('system:time_start');
+var collection = getCollection(region, startYear, endYear);
 
-function aggregateWater(images) {
+function aggregateWater(images, options) {
   var projection = ee.Image(images.first()).select('water').projection();
   var water = images.map(function (image) {
-    // 水体概率≥0.5记为水体，≤0.2记为非水体；中间值视为不确定。
+    // 达到水体阈值记为水体，低于陆地阈值记为非水体；中间值视为不确定。
     var probability = image.select('water');
-    var valid = probability.gte(waterThreshold)
-      .or(probability.lte(landThreshold));
-    return probability.gte(waterThreshold)
+    var valid = probability.gte(options.minWater)
+      .or(probability.lte(options.maxLand));
+    return probability.gte(options.minWater)
       .updateMask(valid)
       .toFloat();
   }).mosaic().setDefaultProjection(projection);
 
   return water
-    .clip(downloadRegion)
+    .clip(options.targetRegion)
     .unmask(255, false)
     .toByte()
     .rename('water_binary');
 }
 
-function getDownloadUrl(image, params) {
-  return new Promise(function (resolve, reject) {
-    image.getDownloadURL(params, function (url, error) {
-      if (error) reject(new Error(String(error)));
-      else resolve(url);
-    });
-  });
-}
+/** 本地 gee-helper */
+var fs = require('node:fs');
+var path = require('node:path');
+var localExport = require('users/kongdd/pkg:export.js');
 
 function groupScenes(indices) {
   var groups = {};
@@ -96,13 +79,20 @@ function groupScenes(indices) {
   });
 }
 
-async function downloadTile(image, group, directory, index) {
+async function downloadTile(
+  image,
+  group,
+  directory,
+  index,
+  tileRegion,
+  options,
+) {
   var tileName = 'tile_' + index;
   var lastError = '';
   for (var attempt = 0; attempt < 5; attempt += 1) {
-    var url = await getDownloadUrl(image, {
+    var url = await options.getDownloadUrl(image, {
       name: tileName,
-      region: tileRegions[index],
+      region: tileRegion,
       format: 'GEO_TIFF',
       filePerBand: false,
     });
@@ -123,58 +113,83 @@ async function downloadTile(image, group, directory, index) {
   );
 }
 
-async function downloadScene(group, position, total) {
+async function downloadScene(group, position, total, options) {
   var name = 'DW_water_fraction_' + group.key;
-  var filename = path.join(outputDir, name + '.tif');
+  var filename = path.join(options.outputDir, name + '.tif');
   if (fs.existsSync(filename)) {
     console.log('[' + position + '/' + total + '] 跳过：' + path.basename(filename));
     return;
   }
 
-  var source = collection.filter(ee.Filter.inList('system:index', group.indices));
-  var image = aggregateWater(source);
-  var temporary = fs.mkdtempSync(path.join(outputDir, '.tmp-' + group.key + '-'));
+  var source = options.collection.filter(
+    ee.Filter.inList('system:index', group.indices),
+  );
+  var image = options.buildImage(source, options.buildImageOptions);
+  var temporary = fs.mkdtempSync(
+    path.join(options.outputDir, '.tmp-' + group.key + '-'),
+  );
   try {
-    var tiles = await Promise.all(tileRegions.map(function (_, index) {
-      return downloadTile(image, group, temporary, index);
+    var tiles = await Promise.all(options.tileRegions.map(function (tileRegion, index) {
+      return downloadTile(
+        image,
+        group,
+        temporary,
+        index,
+        tileRegion,
+        options,
+      );
     }));
     var warpArgs = [
       '-q', '-overwrite', '-t_srs', 'EPSG:4326',
-      '-te', String(gridBounds[0]), String(gridBounds[1]),
-      String(gridBounds[2]), String(gridBounds[3]),
-      '-ts', String(gridWidth), String(gridHeight),
+      '-te', String(options.gridBounds[0]), String(options.gridBounds[1]),
+      String(options.gridBounds[2]), String(options.gridBounds[3]),
+      '-ts', String(options.gridWidth), String(options.gridHeight),
       '-r', 'average', '-srcnodata', '255', '-dstnodata', '-9999',
       '-ot', 'Float32', '-co', 'TILED=YES', '-co', 'COMPRESS=DEFLATE',
     ].concat(tiles, [filename]);
-    childProcess.execFileSync('gdalwarp', warpArgs);
+    options.gdalWarp(warpArgs);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
   console.log('[' + position + '/' + total + '] 完成：' + path.basename(filename));
 }
 
-print(startYear + '—' + endYear + ' 年 6—8 月 Dynamic World 原始瓦片数：', collection.size());
-var downloadPromise = new Promise(function (resolve, reject) {
-  collection.aggregate_array('system:index').evaluate(function (indices, error) {
-    if (error) {
-      reject(new Error(String(error)));
-      return;
-    }
+var localStartYear = Number(process.env.START_YEAR || startYear);
+var localEndYear = Number(process.env.END_YEAR || endYear);
+var localWaterThreshold = Number(
+  process.env.WATER_THRESHOLD || waterThreshold,
+);
+var localLandThreshold = Number(process.env.LAND_THRESHOLD || landThreshold);
+var localCollection = getCollection(region, localStartYear, localEndYear);
+var outputDir = process.env.OUTPUT_DIR || path.join(
+  __dirname,
+  'data',
+  'surface_water_' + localStartYear + '-' + localEndYear +
+    '_JJA_90m_dynamic_world',
+);
+var localOptions = {
+  collection: localCollection,
+  buildImage: aggregateWater,
+  buildImageOptions: {
+    targetRegion: downloadRegion,
+    minWater: localWaterThreshold,
+    maxLand: localLandThreshold,
+  },
+  tileRegions: tileRegions,
+  gridBounds: gridBounds,
+  gridWidth: gridWidth,
+  gridHeight: gridHeight,
+  outputDir: outputDir,
+  maxScenes: Number(process.env.MAX_SCENES || 0),
+  concurrency: Number(process.env.CONCURRENCY || 4),
+  summary: localStartYear + '—' + localEndYear +
+    ' 年 6—8 月 Dynamic World 原始瓦片数：',
+  groupLabel: '逐日文件数',
+  groupScenes: groupScenes,
+  exportImage: downloadScene,
+  getDownloadUrl: _host.getDownloadUrl,
+  gdalWarp: _host.gdalWarp,
+  host: _host,
+};
 
-    var groups = groupScenes(indices);
-    console.log('逐日文件数：' + groups.length);
-    if (maxScenes > 0) groups = groups.slice(0, maxScenes);
-
-    (async function () {
-      for (var i = 0; i < groups.length; i += 1) {
-        await downloadScene(groups[i], i + 1, groups.length);
-      }
-      console.log('下载完成：' + outputDir);
-    })().then(resolve, reject);
-  });
-});
-
-_host.pendingPrints.push(downloadPromise.catch(function (downloadError) {
-  console.error('下载失败：', downloadError.message || downloadError);
-  process.exitCode = 1;
-}));
+localExport.export_col(localOptions);

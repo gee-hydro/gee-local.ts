@@ -69,6 +69,10 @@ test/                 离线单测
 - 本地处理：`julia/gee_local_worker.jl`；用户函数 `apply(ra::SpatRaster; params...)`，`ra.A` 为 2D/3D
 - 自定义指标写 `.jl` 后 `ee data apply --fn ...`
 - GEE 包 `require` 须带 `.js`（Code Editor 语法）；`users/x/y:mod.js` → `packages/users/x/y/mod.js`
+- 同一脚本兼容 GEE Code Editor 与本地 GEE 时，两部分代码必须分开：标准 GEE JavaScript 置于文件最上方，本地专用代码集中置于其后，避免交错，确保主体代码可直接复制到 GEE Code Editor
+- 函数不得隐式读取业务全局变量；区域、时间、阈值、网格、集合和输出路径等依赖须通过参数显式传入
+- 本地下载地址统一由 `_host.getDownloadUrl(image, params)` 获取，脚本不得重复封装 `Image.getDownloadURL`
+- 本地逐景下载统一复用 `packages/users/kongdd/pkg/export.js`；通用函数不得硬编码数据源逻辑，影像命名、筛选、构建及分组函数须由调用方注入；并发数由 `concurrency` 控制，默认 4
 - packages 路径优先级：`--package-path` > `$GEE_JS_PATH` > config > `./packages`
 - 不把 server 数据源注册表引入本包；CLI 使用 collection/band/scale/temporal
 - 数据本地导出优先使用 `/mnt/z/GitHub/gee-hydro/gee-export`，其效率更高

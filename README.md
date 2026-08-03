@@ -54,7 +54,18 @@ ee --repl
 ee --package-path ./packages script.js
 ```
 
-注入 `ee` / `print` / `Map` / `Export` / `Chart` / `ui.Chart`，以及 Code Editor 风格 `require`（路径须带 `.js`）。
+注入 `ee` / `print` / `Map` / `Export` / `Chart` / `ui.Chart`，以及 Code Editor 风格 `require`（路径须带 `.js`）。本地脚本通过 `_host.getDownloadUrl(image, params)` 获取下载地址，通过 `_host.gdalWarp(args)` 调用 GDAL。
+
+GDAL 环境写入用户级 `~/.config/gee-helper/config.json`，由宿主注入子进程：
+
+```json
+{
+  "gdal": {
+    "projData": "/usr/share/proj",
+    "gtiffSrsSource": "EPSG"
+  }
+}
+```
 
 网页端与本地可共用同一入口：
 
