@@ -20,5 +20,12 @@ shp
 *.tmp
 *.png
 *.tif
-Project_*
+Project_DanJiangKou/*
+!Project_DanJiangKou/*.js
 catalog/
+
+Manifest.toml
+.agents
+*.pdf
+
+*.typ

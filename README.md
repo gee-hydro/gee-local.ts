@@ -75,6 +75,34 @@ ee config set packages ./packages
 包路径优先级：`--package-path` > `$GEE_JS_PATH` > config > `./packages`  
 `require('users/x/y:mod.js')` → `packages/users/x/y/mod.js`
 
+### 本地数据（注册 tif/nc + 筛选 + Julia apply）
+
+| 格式 | 后端 | 形态 |
+|------|------|------|
+| GeoTIFF | SpatialRasterLite（ArchGDAL） | 单景 2D / 目录多时相 |
+| NetCDF | NCDatasets → `SpatRaster` | 三维时空 `(lon,lat,time)` |
+
+```bash
+# 首次：julia --project=julia -e 'using Pkg; Pkg.instantiate()'
+
+# 注册
+ee data register --id smap_tif --path ./cache/examples/smap
+ee data register --id sm_nc --path ./data/sm.nc --band sm --format nc
+ee data ls
+ee data unregister --id sm_nc
+
+# 筛选（--catalog 默认 catalog/local.json；--root 仍可扫 export sidecar）
+ee data query --start 2024-07-01 --end 2024-07-31 --bounds 110,30,115,32
+ee data crop --id smap_tif --bounds 110,30,115,32 --outdir ./cache/local-crop
+
+# 用户函数统一签名（2D/3D 同一入口）
+# apply(ra::SpatRaster; params...)  # ra.A :: (nx,ny)|(nx,ny,nt)
+ee data apply --id sm_nc --fn julia/ops/mean_time.jl \
+  --start 2024-07-01 --end 2024-07-10 --outdir ./cache/local-apply
+```
+
+库 API：`registerLocal` / `queryLocal` / `cropLocal` / `applyLocal`。
+
 ## 库 API
 
 ```ts
@@ -83,6 +111,7 @@ import {
   exportBatches, submitExportTasks,
   runScript, setupLocalHost,
   addPackage, loadMergedConfig,
+  queryLocal, cropLocal, applyLocal, registerLocalOp,
 } from 'gee-helper';
 ```
 
@@ -112,9 +141,11 @@ npm run test:coverage   # text + coverage/lcov.info
 src/
   ee.js auth.js       唯一 EE 实例；鉴权
   export/             批量导出（local / Drive / GCS）
+  data/               本地 catalog / 筛选 / Julia worker
   local/              本地宿主、require、config、add
   cli/                CLI（按命令懒加载，help 不拉 EE）
   index.ts            公共 API
+julia/                SpatialRasterLite worker
 packages/             GEE JS 包根
 examples/ test/
 ```

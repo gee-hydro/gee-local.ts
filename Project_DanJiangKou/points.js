@@ -1,0 +1,9 @@
+// https://developers.google.com/earth-engine/datasets/catalog/OPERA_DSWX_L3_V1_HLS
+var col_hls = ee.ImageCollection("OPERA/DSWX/L3_V1/HLS");
+
+points = [
+  [111.58424201047077, 32.73723307755543]
+  [111.13929572140827, 32.69563773129397]
+  [111.14478888547077, 32.54411331120235]
+  [111.4098340514864, 32.57073539191679]
+]
