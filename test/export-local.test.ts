@@ -337,6 +337,22 @@ test('export_col 支持 8d、1m、1y 分组', async () => {
   ]));
 });
 
+test('export_col 直接下载给定分组', async () => {
+  const groups = [
+    { key: 'a', name: 'water_a', indices: ['i1'] },
+    { key: 'b', name: 'water_b', indices: ['i2'] },
+  ];
+  const exported = [];
+  await localExport.export_col({
+    collection: {},
+    groups,
+    exportImage: async (group) => exported.push(group.key),
+    outdir: '/tmp/out',
+    log: false,
+  });
+  assert.deepEqual(exported, ['a', 'b']);
+});
+
 test('export_col 可从 system:index 保留卫星标识', async () => {
   const groups = [];
   await localExport.export_col({

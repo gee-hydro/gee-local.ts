@@ -88,67 +88,71 @@ async function export_img(group, position, total, options) {
 }
 
 
+async function listGroups(options) {
+  var maxGroups = options.maxGroups == null ? -1 : Number(options.maxGroups);
+  if (!Number.isInteger(maxGroups) || maxGroups < -1) {
+    throw new Error('maxGroups 须为 -1 或非负整数');
+  }
+
+  var groups = options.groups;
+  if (!groups) {
+    var period = util.parsePeriod(options.period || '1d');
+    var values = await Promise.all([
+      util.evaluate(options.collection.aggregate_array(
+        options.indexProperty || 'system:index',
+      )),
+      util.evaluate(options.collection.aggregate_array(
+        options.timeProperty || 'system:time_start',
+      )),
+    ]);
+    groups = util.split_group(
+      values[0],
+      values[1],
+      period,
+      options.prefix,
+      options.suffixPattern,
+    );
+  }
+  return maxGroups < 0 ? groups : groups.slice(0, maxGroups);
+}
+
+async function runConcurrent(items, concurrency, task) {
+  var cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      var index = cursor;
+      cursor += 1;
+      await task(items[index], index);
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.min(concurrency, items.length) },
+    worker,
+  ));
+}
+
 async function exportCollection(options) {
   var concurrency = options.concurrency == null ? 4 : Number(options.concurrency);
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error('concurrency 须为正整数');
   }
 
-  var period = options.period || '1d';
-  var parsedPeriod = util.parsePeriod(period);
-  var maxGroups = options.maxGroups == null ? -1 : Number(options.maxGroups);
-  if (!Number.isInteger(maxGroups) || maxGroups < -1) {
-    throw new Error('maxGroups 须为 -1 或非负整数');
-  }
-  var pending = [
-    util.evaluate(options.collection.aggregate_array(
-      options.indexProperty || 'system:index',
-    )),
-    util.evaluate(options.collection.aggregate_array(
-      options.timeProperty || 'system:time_start',
-    )),
-  ];
+  var groups = await listGroups(options);
   if (options.sceneRecord) {
-    pending.push(taskInfo.export_taskInfo(
+    await taskInfo.export_taskInfo(
       options.collection,
       options.sceneRecord.filename,
       options.sceneRecord.properties,
       options.log === false ? null : options.log || console.log,
-    ));
+    );
   }
 
-  var values = await Promise.all(pending);
-  var groups = util.split_group(
-    values[0],
-    values[1],
-    parsedPeriod,
-    options.prefix,
-    options.suffixPattern,
-  );
-  if (maxGroups >= 0) groups = groups.slice(0, maxGroups);
-
-  var workerCount = Math.min(concurrency, groups.length);
-  util.log(
-    options,
-    '时段数：' + groups.length + '；周期：' + period + '；并发：' + workerCount,
-  );
-
-  var cursor = 0;
+  util.log(options, '时段数：' + groups.length + '；并发：' +
+    Math.min(concurrency, groups.length));
   var exportImage = options.exportImage || export_img;
-  async function worker() {
-    while (cursor < groups.length) {
-      var index = cursor;
-      cursor += 1;
-      await exportImage(
-        groups[index],
-        index + 1,
-        groups.length,
-        options,
-      );
-    }
-  }
-
-  await Promise.all(Array.from({ length: workerCount }, worker));
+  await runConcurrent(groups, concurrency, function (group, index) {
+    return exportImage(group, index + 1, groups.length, options);
+  });
   util.log(options, '下载完成：' + options.outdir);
 }
 
@@ -173,4 +177,5 @@ function export_col(options) {
 module.exports = {
   export_img,
   export_col,
+  listGroups,
 };

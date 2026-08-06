@@ -1,3 +1,9 @@
+var fs = require('node:fs');
+
+function mkpath(dirname) {
+  fs.mkdirSync(dirname, { recursive: true });
+}
+
 function evaluate(object) {
   return new Promise(function (resolve, reject) {
     object.evaluate(function (value, error) {
@@ -95,6 +101,7 @@ function split_group(indices, timestamps, period, prefix, suffixPattern) {
 
 module.exports = {
   csvCell,
+  mkpath,
   evaluate,
   groupKey,
   log,
