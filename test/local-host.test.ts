@@ -163,6 +163,17 @@ test('runInScriptContext 注入 require/module/__dirname 且执行后还原', ()
   assert.equal(g.__filename, undefined);
 });
 
+test('runCode 等待脚本返回的异步任务', async () => {
+  const host = await runCode(
+    `(async function () {
+      await new Promise(function (resolve) { setTimeout(resolve, 5); });
+      print('done');
+    })();`,
+    { ready: true, echo: false },
+  );
+  assert.deepEqual(host.print, ['done']);
+});
+
 test('runCode 传播 pendingPrints 异步失败', async () => {
   await assert.rejects(
     runCode(

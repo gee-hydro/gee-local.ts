@@ -15,23 +15,23 @@ function cal_frac_valid(image, options) {
   }).get('valid'));
 }
 
-function readCsv(filename, qualityName) {
+function readCsv(filename) {
   var rows = io.read_csv(filename);
   rows.forEach(function (row) {
     row.source_count = Number(row.source_count);
-    row[qualityName] = Number(row[qualityName]);
+    row.frac_valid = Number(row.frac_valid);
   });
   return new Map(rows.map(function (row) {
     return [row.group_key, row];
   }));
 }
 
-function writeCsv(filename, records, qualityName) {
+function writeCsv(filename, records) {
   io.write_csv(filename, records, [
     'group_key',
     'filename',
     'source_count',
-    qualityName,
+    'frac_valid',
   ]);
 }
 
@@ -55,7 +55,7 @@ async function assess(group, options) {
     filename: group.name + (options.extension || '.tif'),
     source_count: group.indices.length,
   };
-  record[options.qualityName] = Number.isFinite(quality) ? quality : 0;
+  record.frac_valid = Number.isFinite(quality) ? quality : 0;
   return record;
 }
 
@@ -66,8 +66,7 @@ async function assess(group, options) {
  * @returns {Promise<Object[]>} 达到质量阈值的时间分组。
  */
 async function qualityFilter(groups, options) {
-  var quality_name = options.qualityName;
-  var records = readCsv(options.allFile, quality_name);
+  var records = readCsv(options.allFile);
   var step = options.concurrency || 4;
 
   for (var i = 0; i < groups.length; i += step) {
@@ -82,15 +81,15 @@ async function qualityFilter(groups, options) {
     batch.forEach(function (record) {
       records.set(record.group_key, record);
       console.log('[quality] ' + record.group_key + ': ' +
-        record[quality_name].toFixed(6));
+        record.frac_valid.toFixed(6));
     });
-    writeCsv(options.allFile, Array.from(records.values()), quality_name);
+    writeCsv(options.allFile, Array.from(records.values()));
   }
 
   var selected = Array.from(records.values()).filter(function (record) {
-    return record[quality_name] >= options.minQuality;
+    return record.frac_valid >= options.qualityOptions.minQuality;
   });
-  writeCsv(options.selectedFile, selected, quality_name);
+  writeCsv(options.selectedFile, selected);
 
   var selected_keys = new Set(selected.map(function (record) {
     return record.group_key;

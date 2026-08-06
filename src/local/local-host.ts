@@ -230,7 +230,7 @@ export function runInScriptContext(
   code: string,
   filename: string,
   opts: ScriptContextOptions = {},
-): void {
+): unknown {
   const absPath = path.resolve(filename);
   const packagePaths = mergePackagePaths(opts.packagePaths);
   const g = globalThis as Record<string, unknown>;
@@ -245,10 +245,11 @@ export function runInScriptContext(
   g.__filename = absPath;
   g.__dirname = path.dirname(absPath);
 
+  let result: unknown;
   try {
-    withGeePackageRequire(packagePaths, () => {
-      vm.runInThisContext(code, { filename: absPath });
-    });
+    result = withGeePackageRequire(packagePaths, () =>
+      vm.runInThisContext(code, { filename: absPath }),
+    );
     g.exports = mod.exports;
   } finally {
     for (const k of keys) {
@@ -256,6 +257,7 @@ export function runInScriptContext(
       else g[k] = prev[k];
     }
   }
+  return result;
 }
 
 export interface RunScriptOptions extends LocalHostOptions, ScriptContextOptions {
@@ -266,7 +268,7 @@ export interface RunScriptOptions extends LocalHostOptions, ScriptContextOptions
 async function runScriptBody(absPath: string, code: string, opts: RunScriptOptions): Promise<LocalHost> {
   const host = setupLocalHost(opts);
   if (!opts.ready) await ensureReady();
-  runInScriptContext(code, absPath, opts);
+  await Promise.resolve(runInScriptContext(code, absPath, opts));
   await Promise.all(host.pendingPrints);
   return host;
 }
@@ -292,7 +294,11 @@ export async function runScripts(
 export async function runCode(code: string, opts: RunScriptOptions = {}): Promise<LocalHost> {
   const host = setupLocalHost(opts);
   if (!opts.ready) await ensureReady();
-  runInScriptContext(code, path.join(process.cwd(), '.<gee-inline>.js'), opts);
+  await Promise.resolve(runInScriptContext(
+    code,
+    path.join(process.cwd(), '.<gee-inline>.js'),
+    opts,
+  ));
   await Promise.all(host.pendingPrints);
   return host;
 }
