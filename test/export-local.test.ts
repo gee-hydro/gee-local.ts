@@ -33,7 +33,7 @@ test('export_img 通过回调注入数据源与影像构建逻辑', async () => 
   };
 
   try {
-    const filename = await localExport.export_img(group, 1, 1, {
+    const filename = await localExport.export_img({}, group, 1, 1, {
       outdir,
       log: false,
       getSource(received) {
@@ -80,16 +80,16 @@ test('export_img 默认按 indexProperty 筛选数据源', async () => {
 
   try {
     await localExport.export_img(
+      {
+        filter(received) {
+          assert.equal(received, filter);
+          return source;
+        },
+      },
       { key: 'g1', name: 'test', indices: ['i1'] },
       1,
       1,
       {
-        collection: {
-          filter(received) {
-            assert.equal(received, filter);
-            return source;
-          },
-        },
         indexProperty: 'scene_id',
         outdir,
         log: false,
@@ -138,6 +138,7 @@ test('export_img 支持切片下载并用 GDAL 合并', async () => {
 
   try {
     const filename = await localExport.export_img(
+      {},
       { key: '20240101', name: 'water_20240101', indices: ['i1'] },
       1,
       1,
@@ -185,11 +186,10 @@ test('export_col 支持自定义并发并注册 gee-helper 异步任务', async 
   global.print = () => {};
 
   try {
-    const pending = localExport.export_col({
-      collection: mockCollection(
-        ['a', 'b', 'c'],
-        ['2024-01-01', '2024-01-02', '2024-01-03'].map(Date.parse),
-      ),
+    const pending = localExport.export_col(mockCollection(
+      ['a', 'b', 'c'],
+      ['2024-01-01', '2024-01-02', '2024-01-03'].map(Date.parse),
+    ), {
       exportImage: async (group) => {
         started.push(group.key);
         await gate;
@@ -246,8 +246,7 @@ test('export_col 按 properties 写出通用影像记录', async () => {
   let exported = 0;
 
   try {
-    await localExport.export_col({
-      collection,
+    await localExport.export_col(collection, {
       sceneRecord: { filename, properties },
       maxGroups: 0,
       exportImage: async () => { exported += 1; },
@@ -273,11 +272,10 @@ test('export_col 默认并发数为 4', async () => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   const dates = ['01', '02', '03', '04', '05'];
-  const pending = localExport.export_col({
-    collection: mockCollection(
-      dates,
-      dates.map((day) => Date.parse('2024-01-' + day + 'T00:00:00Z')),
-    ),
+  const pending = localExport.export_col(mockCollection(
+    dates,
+    dates.map((day) => Date.parse('2024-01-' + day + 'T00:00:00Z')),
+  ), {
     exportImage: async (group) => {
       started.push(group.key);
       await gate;
@@ -307,8 +305,7 @@ test('export_col 支持 8d、1m、1y 分组', async () => {
 
   async function groupsFor(period) {
     const groups = [];
-    await localExport.export_col({
-      collection: mockCollection(indices, timestamps),
+    await localExport.export_col(mockCollection(indices, timestamps), {
       period,
       maxGroups: -1,
       prefix: 'water_',
@@ -343,8 +340,7 @@ test('export_col 直接下载给定分组', async () => {
     { key: 'b', name: 'water_b', indices: ['i2'] },
   ];
   const exported = [];
-  await localExport.export_col({
-    collection: {},
+  await localExport.export_col({}, {
     groups,
     exportImage: async (group) => exported.push(group.key),
     outdir: '/tmp/out',
@@ -355,11 +351,10 @@ test('export_col 直接下载给定分组', async () => {
 
 test('export_col 可从 system:index 保留卫星标识', async () => {
   const groups = [];
-  await localExport.export_col({
-    collection: mockCollection(
-      ['scene_a_S2B', 'scene_b_L8', 'scene_c_S2B'],
-      ['2023-06-01', '2023-06-01', '2023-06-01'].map(Date.parse),
-    ),
+  await localExport.export_col(mockCollection(
+    ['scene_a_S2B', 'scene_b_L8', 'scene_c_S2B'],
+    ['2023-06-01', '2023-06-01', '2023-06-01'].map(Date.parse),
+  ), {
     prefix: 'DSWX_water_fraction_',
     suffixPattern: /_([^_]+)$/,
     exportImage: async (group) => groups.push(group),
@@ -383,7 +378,7 @@ test('export_col 可从 system:index 保留卫星标识', async () => {
 
 test('export_col 拒绝非法周期', async () => {
   await assert.rejects(
-    localExport.export_col({ collection: {}, period: 'weekly' }),
+    localExport.export_col({}, { period: 'weekly' }),
     /period 须为 Nd、Nm 或 Ny/,
   );
 });
@@ -394,7 +389,7 @@ test('export_col 向宿主传播异步失败', async () => {
   global._host = { pendingPrints: [] };
 
   try {
-    const pending = localExport.export_col({ collection: {}, period: 'weekly' });
+    const pending = localExport.export_col({}, { period: 'weekly' });
     assert.equal(global._host.pendingPrints[0], pending);
     await assert.rejects(pending, /period 须为 Nd、Nm 或 Ny/);
     assert.equal(process.exitCode, 1);

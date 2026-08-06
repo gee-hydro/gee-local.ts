@@ -40,27 +40,37 @@ function read_csv(filename) {
   });
 }
 
-function write_csv(filename, records, columns) {
+function csv_text(records, columns, include_header) {
   var rows = Array.isArray(records) ? records : Array.from(records.values());
   var header = columns || Object.keys(rows[0] || {});
-  var lines = [header.join(',')];
-  rows.forEach(function (record) {
-    lines.push(header.map(function (name) {
+  var lines = rows.map(function (record) {
+    return header.map(function (name) {
       var value = record[name];
       var text = value == null ? '' : String(value);
       return /[",\n\r]/.test(text)
         ? '"' + text.replace(/"/g, '""') + '"'
         : text;
-    }).join(','));
+    }).join(',');
   });
+  if (include_header) lines.unshift(header.join(','));
+  return lines.join('\n') + '\n';
+}
 
+function write_csv(filename, records, columns) {
   fs.mkdirSync(path.dirname(filename), { recursive: true });
   var tmp = filename + '.tmp';
-  fs.writeFileSync(tmp, lines.join('\n') + '\n');
+  fs.writeFileSync(tmp, csv_text(records, columns, true));
   fs.renameSync(tmp, filename);
 }
 
+function append_csv(filename, records, columns) {
+  fs.mkdirSync(path.dirname(filename), { recursive: true });
+  var exists = fs.existsSync(filename) && fs.statSync(filename).size > 0;
+  fs.appendFileSync(filename, csv_text(records, columns, !exists));
+}
+
 module.exports = {
+  append_csv,
   read_csv,
   write_csv,
 };

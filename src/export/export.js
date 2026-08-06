@@ -39,7 +39,7 @@ async function downloadFile(image, params, filename, group, options, host) {
   throw new Error('下载失败：' + group.key + ': ' + lastError);
 }
 
-async function export_img(group, position, total, options) {
+async function export_img(col, group, position, total, options) {
   var name = group.name;
   var filename = options.getFilename
     ? options.getFilename(name, group, options)
@@ -61,7 +61,7 @@ async function export_img(group, position, total, options) {
     if (!ee || !ee.Filter) {
       throw new Error('默认数据源筛选仅在 gee-helper 本地运行时可用');
     }
-    source = options.collection.filter(ee.Filter.inList(
+    source = col.filter(ee.Filter.inList(
       options.indexProperty || 'system:index',
       group.indices,
     ));
@@ -88,7 +88,7 @@ async function export_img(group, position, total, options) {
 }
 
 
-async function listGroups(options) {
+async function listGroups(col, options) {
   var maxGroups = options.maxGroups == null ? -1 : Number(options.maxGroups);
   if (!Number.isInteger(maxGroups) || maxGroups < -1) {
     throw new Error('maxGroups 须为 -1 或非负整数');
@@ -98,10 +98,10 @@ async function listGroups(options) {
   if (!groups) {
     var period = util.parsePeriod(options.period || '1d');
     var values = await Promise.all([
-      util.evaluate(options.collection.aggregate_array(
+      util.evaluate(col.aggregate_array(
         options.indexProperty || 'system:index',
       )),
-      util.evaluate(options.collection.aggregate_array(
+      util.evaluate(col.aggregate_array(
         options.timeProperty || 'system:time_start',
       )),
     ]);
@@ -131,16 +131,16 @@ async function runConcurrent(items, concurrency, task) {
   ));
 }
 
-async function exportCollection(options) {
+async function exportCollection(col, options) {
   var concurrency = options.concurrency == null ? 4 : Number(options.concurrency);
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error('concurrency 须为正整数');
   }
 
-  var groups = await listGroups(options);
+  var groups = await listGroups(col, options);
   if (options.sceneRecord) {
     await taskInfo.export_taskInfo(
-      options.collection,
+      col,
       options.sceneRecord.filename,
       options.sceneRecord.properties,
       options.log === false ? null : options.log || console.log,
@@ -149,20 +149,21 @@ async function exportCollection(options) {
 
   util.log(options, '时段数：' + groups.length + '；并发：' +
     Math.min(concurrency, groups.length));
-  var exportImage = options.exportImage || export_img;
   await runConcurrent(groups, concurrency, function (group, index) {
-    return exportImage(group, index + 1, groups.length, options);
+    return options.exportImage
+      ? options.exportImage(group, index + 1, groups.length, options)
+      : export_img(col, group, index + 1, groups.length, options);
   });
   util.log(options, '下载完成：' + options.outdir);
 }
 
-function export_col(options) {
+function export_col(col, options) {
   var host = globalThis._host;
   if (typeof globalThis.print === 'function') {
-    globalThis.print('原始影像数：', options.collection.size());
+    globalThis.print('原始影像数：', col.size());
   }
 
-  var promise = exportCollection(options);
+  var promise = exportCollection(col, options);
   if (!host) return promise;
 
   var registered = promise.catch(function (error) {

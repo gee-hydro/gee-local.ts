@@ -1,40 +1,7 @@
 // OPERA DSWx-HLS：按研究区有效观测比例筛选并下载丹江口水体比例。
 // https://developers.google.com/earth-engine/datasets/catalog/OPERA_DSWX_L3_V1_HLS
 
-function makeCrsTransform(bounds, cellsize) {
-  return [
-    cellsize, 0, bounds[0],
-    0, -cellsize, bounds[3],
-  ];
-}
-
-function buildOptions(bounds, region, cellsize_target) {
-  // WGS84 局部网格：源数据名义 30 m，输出名义 90 m。
-  var cellsize_source = 1 / 3600;
-  return {
-    crs: 'EPSG:4326',
-    region: region,
-    crsTransform_source: makeCrsTransform(bounds, cellsize_source),
-    crsTransform_target: makeCrsTransform(bounds, cellsize_target),
-  }
-}
-
-function resample(image, options) {
-  mosaic = mosaic.setDefaultProjection(
-    ee.Projection(options.crs),
-    options.crsTransform_source,
-  ); // ! 必须指定，mosaic之后projection信息丢失
-
-  return mosaic
-    .reduceResolution({
-      reducer: ee.Reducer.mean(),
-      maxPixels: 1024,
-    })
-    .reproject({
-      crs: 'EPSG:4326',
-      crsTransform: options.crsTransform_target,
-    });
-}
+var pkg_resample = require('src/export/resample.js');
 
 function mosaicWater_HLS(images) {
   return images.map(function (image) {
@@ -47,21 +14,21 @@ function mosaicWater_HLS(images) {
 
 function aggWaterFrac_HLS(images, options) {
   var mosaic = mosaicWater_HLS(images);
-  return resample(mosaic, options)
+  return pkg_resample.resample(mosaic, options)
     .rename('water_fraction')
     .unmask(-9999, false)
-    .clip(options.region)
+    .clip(options.region);
 }
 
-/** GEE JavaScript */
+/** MAIN JavaScript */
 // 丹江口水库 OSM 边界外扩约 2 km，避免岸线被截断。
 var bounds = [110.67, 32.42, 111.73, 33.07];
 var region = ee.Geometry.Rectangle(bounds, 'EPSG:4326', false);
 
 var cellsize_target = 1 / 1200;
-var buildImageOptions = buildOptions(bounds, region, cellsize_target);
+var resample_options = pkg_resample.resampleOptions(bounds, cellsize_target);
 
-var minValidFraction = 0.9;
+var minValidFraction = Number(process.env.MIN_VALID_FRACTION || 0.9);
 var qualityScale = 500;
 
 var col = ee.ImageCollection('OPERA/DSWX/L3_V1/HLS')
@@ -74,35 +41,31 @@ var col = ee.ImageCollection('OPERA/DSWX/L3_V1/HLS')
 var path = require('node:path');
 var localExport = require('../src/export/export.js');
 var util = require('../src/export/utilize.js');
-var qualityFilter = require('../src/export/qualityFilter.js');
+var col_frac_valid = require('../dist/export/frac_valid.js');
 
-var outdir = path.join(__dirname, 'data', 'surface_water_2020-2026_valid90_90m');
-var f_quality_all = process.env.QUALITY_FILE || path.join(outdir, 'DSWX_daily_all.csv');
-var f_quality_sel = process.env.SELECTED_FILE || path.join(outdir, 'DSWX_daily_selected.csv');
+var outdir = process.env.OUTDIR ||
+  path.join(__dirname, 'data', 'surface_water_2020-2026_valid90_90m');
+util.mkpath(outdir);
 
+var prefix = 'DSWX_water_fraction_';
 var exportOptions = {
   region: region,
-  collection: col,
   outdir: outdir,
+  prefix: prefix,
+  suffixPattern: /_([^_]+)$/, // system:index`..._S2B` → `_S2B`
   maxGroups: Number(process.env.MAX_GROUPS || -1),
-  concurrency: 4,
   period: '1d',
-  prefix: 'DSWX_water_fraction_',
-  suffixPattern: /_([^_]+)$/,
   buildImage: aggWaterFrac_HLS,
-  buildImageOptions: buildImageOptions,
+  buildImageOptions: resample_options,
 };
 
 async function main() {
-  util.mkpath(outdir);
-  var groups = await localExport.listGroups(exportOptions);
+  var groups = await localExport.listGroups(col, exportOptions);
 
-  console.time('[quality] qualityFilter');
-  var selected = await qualityFilter(groups, {
-    collection: col,
-    allFile: f_quality_all,
-    selectedFile: f_quality_sel,
-    concurrency: exportOptions.concurrency,
+  console.time('[quality] col_frac_valid');
+  var selected = await col_frac_valid(col, groups, {
+    outdir: outdir,
+    prefix: prefix,
     buildImage: mosaicWater_HLS,
     qualityOptions: {
       targetRegion: region,
@@ -110,10 +73,10 @@ async function main() {
       minQuality: minValidFraction,
     },
   });
-  console.timeEnd('[quality] qualityFilter');
+  console.timeEnd('[quality] col_frac_valid');
   if (process.env.QUALITY_ONLY) return;
 
-  await localExport.export_col(Object.assign({}, exportOptions, {
+  await localExport.export_col(col, Object.assign({}, exportOptions, {
     groups: selected,
     maxGroups: -1,
   }));
