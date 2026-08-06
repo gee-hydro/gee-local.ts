@@ -18,10 +18,8 @@ function mockCollection(indices, timestamps) {
   };
 }
 
-test('export_img 通过回调注入数据源与影像构建逻辑', async () => {
+test('export_img 下载已构建的影像', async () => {
   const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gee-export-img-'));
-  const group = { key: 'g1', name: 'test', indices: ['i1'] };
-  const source = {};
   const image = {};
   const previousHost = global._host;
   global._host = {
@@ -33,17 +31,12 @@ test('export_img 通过回调注入数据源与影像构建逻辑', async () => 
   };
 
   try {
-    const filename = await localExport.export_img({}, group, 1, 1, {
+    const filename = await localExport.export_img(
+      image,
+      path.join(outdir, 'test.tif'),
+      {
       outdir,
       log: false,
-      getSource(received) {
-        assert.equal(received, group);
-        return source;
-      },
-      buildImage(received) {
-        assert.equal(received, source);
-        return image;
-      },
       fetch: async () => ({
         ok: true,
         arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
@@ -53,59 +46,6 @@ test('export_img 通过回调注入数据源与影像构建逻辑', async () => 
     assert.equal(filename, path.join(outdir, 'test.tif'));
     assert.deepEqual([...fs.readFileSync(filename)], [1, 2, 3]);
   } finally {
-    if (previousHost === undefined) delete global._host;
-    else global._host = previousHost;
-    fs.rmSync(outdir, { recursive: true, force: true });
-  }
-});
-
-test('export_img 默认按 indexProperty 筛选数据源', async () => {
-  const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gee-export-source-'));
-  const previousEe = global.ee;
-  const previousHost = global._host;
-  const source = {};
-  const filter = {};
-  global.ee = {
-    Filter: {
-      inList(property, indices) {
-        assert.equal(property, 'scene_id');
-        assert.deepEqual(indices, ['i1']);
-        return filter;
-      },
-    },
-  };
-  global._host = {
-    getDownloadUrl: () => Promise.resolve('https://example.test/test.tif'),
-  };
-
-  try {
-    await localExport.export_img(
-      {
-        filter(received) {
-          assert.equal(received, filter);
-          return source;
-        },
-      },
-      { key: 'g1', name: 'test', indices: ['i1'] },
-      1,
-      1,
-      {
-        indexProperty: 'scene_id',
-        outdir,
-        log: false,
-        buildImage(received) {
-          assert.equal(received, source);
-          return {};
-        },
-        fetch: async () => ({
-          ok: true,
-          arrayBuffer: async () => new Uint8Array([1]).buffer,
-        }),
-      },
-    );
-  } finally {
-    if (previousEe === undefined) delete global.ee;
-    else global.ee = previousEe;
     if (previousHost === undefined) delete global._host;
     else global._host = previousHost;
     fs.rmSync(outdir, { recursive: true, force: true });
@@ -139,14 +79,10 @@ test('export_img 支持切片下载并用 GDAL 合并', async () => {
   try {
     const filename = await localExport.export_img(
       {},
-      { key: '20240101', name: 'water_20240101', indices: ['i1'] },
-      1,
-      1,
+      path.join(outdir, 'water_20240101.tif'),
       {
         outdir,
         log: false,
-        getSource: () => ({}),
-        buildImage: () => ({}),
         fetch: async () => ({
           ok: true,
           arrayBuffer: async () => new Uint8Array([1]).buffer,

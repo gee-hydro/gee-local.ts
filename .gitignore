@@ -20,12 +20,14 @@ shp
 *.tmp
 *.png
 *.tif
+*.gif
+
 Project_DanJiangKou/*
 !Project_DanJiangKou/*.js
 catalog/
 
 Manifest.toml
 .agents
-*.pdf
 
+*.pdf
 *.typ

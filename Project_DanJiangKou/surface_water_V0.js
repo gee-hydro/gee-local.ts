@@ -46,13 +46,29 @@ function aggWater_HLS(images, options) {
 }
 
 /** 本地 gee-helper */
-var path = require('node:path');
-var localExport = require('../src/export/export.js');
+var pkg = require('../dist/index.js');
 
-var outdir = path.join(__dirname, 'data', 'surface_water_2020-2026_JJA_90m');
+var outdir = pkg.path.join(__dirname, 'data', 'surface_water_2020-2026_JJA_90m');
+var build_options = {
+  targetRegion: region,
+  targetTransform: gridTransform,
+};
+var group_options = {
+  prefix: 'DSWX_water_fraction_',
+  suffixPattern: /_([^_]+)$/,
+  maxGroups: Number(process.env.MAX_GROUPS || -1),
+  period: '1d',
+};
+var download_options = { outdir: outdir, region: region };
+function exportImage(group) {
+  var source = collection.filter(ee.Filter.inList('system:index', group.indices));
+  var image = aggWater_HLS(source, build_options);
+  var filename = pkg.path.join(outdir, group.name + '.tif');
+  return pkg.export_img(image, filename, download_options);
+}
 
 var taskInfo = {
-  filename: path.join(outdir, 'DSWX_scenes_cloud_lt20.csv'),
+  filename: pkg.path.join(outdir, 'DSWX_scenes_cloud_lt20.csv'),
   properties: [
     'system:index',
     'system:time_start',
@@ -61,21 +77,16 @@ var taskInfo = {
     'CLOUD_COVERAGE',
     'INPUT_HLS_PRODUCT_CLOUD_COVERAGE',
   ],
+};
+
+async function main() {
+  var groups = await pkg.listGroups(collection, group_options);
+  await pkg.export_col(collection, {
+    groups: groups,
+    concurrency: 4,
+    sceneRecord: taskInfo,
+    exportImage: exportImage,
+  });
 }
 
-localExport.export_col({
-  region: region,
-  collection: collection,
-  outdir: outdir,
-  maxGroups: Number(process.env.MAX_GROUPS || -1),
-  concurrency: 4,
-  period: '1d',
-  prefix: 'DSWX_water_fraction_',
-  suffixPattern: /_([^_]+)$/,
-  sceneRecord: taskInfo,
-  buildImage: aggWater_HLS,
-  buildImageOptions: {
-    targetRegion: region,
-    targetTransform: gridTransform,
-  },
-});
+main();

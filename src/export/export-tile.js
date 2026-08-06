@@ -46,26 +46,19 @@ function mergeTiles(tiles, filename, tiling, host) {
 }
 
 async function exportTiles({
-  downloadFile, filename, getDownloadParams, group, host, image, options,
+  downloadFile, filename, getDownloadParams, host, image, name, options,
 }) {
   fs.mkdirSync(options.outdir, { recursive: true });
   var temporary = fs.mkdtempSync(
-    path.join(options.outdir, '.tmp-' + group.key + '-'),
+    path.join(options.outdir, '.tmp-' + name + '-'),
   );
   try {
     var regions = makeTileRegions(options.tiling);
     var tiles = await Promise.all(regions.map(function (region, index) {
-      var tileName = group.name + '_tile_' + index;
+      var tileName = name + '_tile_' + index;
       var tileFile = path.join(temporary, tileName + '.tif');
-      var params = getDownloadParams(tileName, group, region, options);
-      return downloadFile(
-        image,
-        params,
-        tileFile,
-        group,
-        options,
-        host,
-      );
+      var params = getDownloadParams(tileName, region, options);
+      return downloadFile(image, tileFile, options, params, host);
     }));
     mergeTiles(tiles, filename, options.tiling, host);
   } finally {

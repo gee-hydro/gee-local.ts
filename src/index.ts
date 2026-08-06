@@ -1,8 +1,28 @@
+import * as path from 'node:path';
+
+export { path };
 export { ee } from './ee';
 export { ensureReady, getInfo } from './auth';
 export type { GeeDailyReduction, GeeTemporal } from './types';
 
 export { validateCacheBounds, type CacheBounds } from './export/bounds';
+export {
+  export_col,
+  export_img,
+  getDownloadParams,
+  listGroups,
+} from './export/export.js';
+export type {
+  Collection,
+  DownloadOptions,
+  ExportOptions,
+  Group,
+  GroupOptions,
+} from './export/export.js';
+export { mkpath } from './export/utilize.js';
+export { resample, resampleOptions } from './export/resample.js';
+import col_frac_valid = require('./export/frac_valid.js');
+export { col_frac_valid };
 export { frameCollection } from './export/frame-collection';
 export {
   dailyBuckets,

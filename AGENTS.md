@@ -37,9 +37,9 @@ node bin/ee submit --dry-run \
 ```
 src/
   ee.js / auth.js     唯一 EE 实例；鉴权 + getInfo
-  export/             export.js / batches / tasks / frame-collection / bounds
+  export/             export.ts / export-image.ts / export-tile.js / batches / tasks
   data/               本地 catalog / 日期范围筛选 / Julia worker
-  local/              local-host / gee-require / pkg-add / config
+  local/              local-host / runtime / gee-require / pkg-add / config
   cli/
     index.ts          入口；按命令 require 懒加载（help 不拉 EE）
     args.ts           参数解析 + HELP
@@ -61,6 +61,10 @@ test/                 离线单测
 - 一个函数只做一件事；机制与业务规则分离。
 - 优先直接复用已有能力；拒绝重复实现、无效包装和过度抽象。
 - 通过划分职责简化代码，不以删除必要功能换取简短。
+- 先定义数据流，再划分函数；每个函数只完成一个动作。
+- 领域逻辑与通用机制分离；用户决定处理方式，库只负责可靠执行。
+- 参数只传给真正需要它的函数，避免万能 `options` 和隐式全局依赖。
+- 副作用集中在边界层，核心流程保持线性、显式、可测试。
 
 ## 修改原则
 
@@ -79,7 +83,7 @@ test/                 离线单测
 - 同一脚本兼容 GEE Code Editor 与本地 GEE 时，两部分代码必须分开：标准 GEE JavaScript 置于文件最上方，本地专用代码集中置于其后，避免交错，确保主体代码可直接复制到 GEE Code Editor
 - 函数不得隐式读取业务全局变量；区域、时间、阈值、网格、集合和输出路径等依赖须通过参数显式传入
 - 本地下载地址统一由 `_host.getDownloadUrl(image, params)` 获取，脚本不得重复封装 `Image.getDownloadURL`
-- 本地逐景下载统一复用 `src/export/export.js`；大影像通过 `tiling` 由 `export_img` 自动切片并用 GDAL 合并，不得在业务脚本重复实现下载函数；通用函数不得硬编码数据源逻辑，输出名由 `prefix + 时段键` 生成，需保留卫星等来源标识时通过 `suffixPattern` 从 `system:index` 提取；通用 `system:index` 筛选由模块内部提供，业务脚本仅按需覆盖 `getSource`，影像构建函数由调用方注入；影像记录通过 `sceneRecord: { filename, properties }` 配置，CSV 写出逻辑不得在业务脚本重复实现；`_host`、下载地址与 GDAL 服务由模块内部获取，不得暴露为用户参数；分组周期由 `period` 控制（如 `8d`、`1m`、`1y`，默认 `1d`），并发数由 `concurrency` 控制（默认 4）
+- 本地逐景下载统一复用 `src/export/export.ts` 与 `src/export/export-image.ts`；`listGroups` 负责分组及 `prefix`、`suffixPattern`，`export_col` 接收已选分组并负责并发调度；用户通过 `exportImage(group)` 负责筛选、mosaic、重采样和命名，再调用 `export_img(image, filename, downloadOptions)`；`export_img` 只负责下载、切片、重试和写文件，不得内置数据源、集合筛选或 `buildImage`；下载函数使用最小 `DownloadOptions`，不得传递完整调度配置；`_host`、下载地址与 GDAL 服务由模块内部获取；分组周期由 `period` 控制（如 `8d`、`1m`、`1y`，默认 `1d`），并发数由 `concurrency` 控制（默认 4）
 - packages 路径优先级：`--package-path` > `$GEE_JS_PATH` > config > `./packages`
 - 不把 server 数据源注册表引入本包；CLI 使用 collection/band/scale/temporal
 - 数据本地导出优先使用 `/mnt/z/GitHub/gee-hydro/gee-export`，其效率更高

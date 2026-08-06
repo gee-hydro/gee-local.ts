@@ -51,25 +51,37 @@ function aggWater_DynamicWorld(images, options) {
 }
 
 /** 本地 gee-helper */
-var path = require('node:path');
-var localExport = require('../src/export/export.js');
+var pkg = require('../dist/index.js');
 
-var outdir = path.join(
+var outdir = pkg.path.join(
   __dirname,
   'data',
   'surface_water_' + startYear + '-' + endYear + '_JJA_90m_dynamic_world',
 );
-
-localExport.export_col({
-  region: region,
-  collection: collection,
-  outdir: outdir,
+var build_options = {
+  targetRegion: region,
+  targetTransform: gridTransform,
+  minWater: waterThreshold,
+  maxLand: landThreshold,
+};
+var group_options = {
   prefix: 'DW_water_fraction_',
-  buildImage: aggWater_DynamicWorld,
-  buildImageOptions: {
-    targetRegion: region,
-    targetTransform: gridTransform,
-    minWater: waterThreshold,
-    maxLand: landThreshold,
-  },
-});
+  period: '1d',
+};
+var download_options = { outdir: outdir, region: region };
+function exportImage(group) {
+  var source = collection.filter(ee.Filter.inList('system:index', group.indices));
+  var image = aggWater_DynamicWorld(source, build_options);
+  var filename = pkg.path.join(outdir, group.name + '.tif');
+  return pkg.export_img(image, filename, download_options);
+}
+
+async function main() {
+  var groups = await pkg.listGroups(collection, group_options);
+  await pkg.export_col(collection, {
+    groups: groups,
+    exportImage: exportImage,
+  });
+}
+
+main();
