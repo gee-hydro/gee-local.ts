@@ -56,6 +56,9 @@ ee config get packages
 | `smap-mean.js` / `modis-ndvi.js` | 纯 Code Editor 风格 |
 | `qinhuangdao-latest-lst.js` | Landsat 7/8/9 联合检索最新地表温度 |
 | `qinhuangdao-lst-availability.js` | 检索 2026 年 1—9 月可用 LST，输出逐景及月平均 CSV |
+| `hubei-water-fraction.js` | JRC GSW 湖北省 1/120° 水体比例与二值水体 |
+| `polygonize-hubei-water.jl` | 按 `frac_water` 阈值生成 Shapefile |
+| `validate-hubei-water-shapefile.R` | 验证并绘制水体 Shapefile |
 
 ### 秦皇岛地表温度验证记录
 
@@ -65,6 +68,27 @@ ee config get packages
 
 - 数据：`data/qinhuangdao_lst/Qinhuangdao_Landsat_LST_<date>_90m.tif`
 - 地图：`maps/qinhuangdao_latest_lst.html`（MapLibre 交互式图层）
+
+### 湖北省水体比例与矢量化
+
+水体定义为 JRC GSW `seasonality >= 2`；先聚合为 1/120° 水体比例，再按阈值矢量化。
+
+```bash
+# 下载 GeoTIFF，并绘制 frac_water 与 frac_water > 0.5
+node bin/ee examples/hubei-water-fraction.js
+
+# Shapefile：阈值可取 0.3、0.5 等
+SRL=/mnt/z/GitHub/jl-pkgs/SpatialRasterLite.jl
+TIF=data/hubei_water_fraction/Hubei_JRC_GSW_seasonality_ge2_water_1over120deg.tif
+julia --project="$SRL" examples/polygonize-hubei-water.jl \
+  "$TIF" data/hubei_water_fraction/Hubei_JRC_GSW_water_frac_gt_0.3.shp 0.3
+
+# R：逐像元回代、面积验证及绘图
+Rscript examples/validate-hubei-water-shapefile.R \
+  "$TIF" data/hubei_water_fraction/Hubei_JRC_GSW_water_frac_gt_0.3.shp \
+  data/hubei_water_fraction/Hubei_JRC_GSW_water_frac_gt_0.3_validation.csv \
+  images/hubei-water-shapefile-frac-gt-0.3.png 0.3
+```
 
 ## 库 API 本地下载
 

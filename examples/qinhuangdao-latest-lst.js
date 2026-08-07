@@ -3,6 +3,8 @@
 // Landsat 7/8/9 L2：https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LE07_C02_T1_L2
 // 本地验证：node bin/ee examples/qinhuangdao-latest-lst.js
 
+// https://code.earthengine.google.com/2d9abf8a7f8b17c260b8741fec6ebf83
+
 var city = ee.FeatureCollection('FAO/GAUL/2015/level2')
   .filter(ee.Filter.eq('ADM0_NAME', 'China'))
   .filter(ee.Filter.eq('ADM1_NAME', 'Hebei Sheng'))

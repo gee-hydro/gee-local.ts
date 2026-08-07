@@ -30,20 +30,27 @@ async function download_file(
 
   for (let attempt = 0; attempt < retries; attempt += 1) {
     const url = await host.getDownloadUrl(image, params);
-    const response = await (options.fetch || fetch)(url);
-    if (response.ok) {
-      fs.mkdirSync(path.dirname(filename), { recursive: true });
-      fs.writeFileSync(filename, Buffer.from(await response.arrayBuffer()));
-      return filename;
+    try {
+      const response = await (options.fetch || fetch)(url);
+      if (response.ok) {
+        fs.mkdirSync(path.dirname(filename), { recursive: true });
+        fs.writeFileSync(filename, Buffer.from(await response.arrayBuffer()));
+        return filename;
+      }
+
+      last_error = typeof response.text === 'function'
+        ? await response.text()
+        : 'HTTP ' + response.status;
+      if (response.status !== 429 && response.status !== 503) break;
+    } catch (error) {
+      last_error = error instanceof Error ? error.message : String(error);
     }
 
-    last_error = typeof response.text === 'function'
-      ? await response.text()
-      : 'HTTP ' + response.status;
-    if (response.status !== 429 && response.status !== 503) break;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 2000 * Math.pow(2, attempt));
-    });
+    if (attempt + 1 < retries) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 2000 * Math.pow(2, attempt));
+      });
+    }
   }
   throw new Error('下载失败：' + path.basename(filename) + ': ' + last_error);
 }
