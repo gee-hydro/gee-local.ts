@@ -9,17 +9,12 @@ import { ensureReady, getInfo } from '../auth';
 import { ee } from '../ee';
 import { getDownloadUrl } from './download';
 import { gdalWarp } from './gdal';
+import { renderMap, type MapLayer } from './map';
 import { mergePackagePaths, withGeePackageRequire } from './gee-require';
 
 const ORIG_MAP_CTOR: MapConstructor | undefined = globalThis.Map;
 
-export interface LayerSpec {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  image: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  vis: any;
-  name: string;
-}
+export interface LayerSpec extends MapLayer {}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TaskSpec = Record<string, any> & { type: string };
@@ -29,7 +24,12 @@ export interface LocalHost {
   layers: LayerSpec[];
   tasks: TaskSpec[];
   charts: TaskSpec[];
-  pendingPrints: Promise<void>[];
+  pendingPrints: Promise<unknown>[];
+  mapRegion?: unknown;
+  mapCenter?: [number, number];
+  mapZoom?: number;
+  mapBasemap?: string;
+  mapOutput?: string;
   getDownloadUrl: typeof getDownloadUrl;
   gdalWarp: (args: readonly string[]) => void;
 }
@@ -150,13 +150,34 @@ export function setupLocalHost(opts: LocalHostOptions = {}): LocalHost {
     MapShim.prototype = origMapCtor.prototype;
     Object.setPrototypeOf(MapShim, origMapCtor);
   }
-  MapShim.addLayer = (image: unknown, vis: unknown, name: string) => {
-    host.layers.push({ image, vis, name });
+  MapShim.addLayer = (
+    image: unknown,
+    vis: unknown = {},
+    name = `Layer ${host.layers.length + 1}`,
+    shown = true,
+    opacity = 1,
+  ) => {
+    host.layers.push({ image, vis, name, shown, opacity });
     if (echo) console.log(`[Map.addLayer] ${name}`);
   };
-  MapShim.centerObject = () => {};
-  MapShim.setCenter = () => {};
-  MapShim.setOptions = () => {};
+  MapShim.centerObject = (object: any, zoom?: number) => {
+    host.mapRegion = typeof object.geometry === 'function'
+      ? object.geometry()
+      : object;
+    host.mapCenter = undefined;
+    host.mapZoom = zoom;
+  };
+  MapShim.setCenter = (lon: number, lat: number, zoom = 8) => {
+    host.mapRegion = undefined;
+    host.mapCenter = [lon, lat];
+    host.mapZoom = zoom;
+  };
+  MapShim.setZoom = (zoom: number) => {
+    host.mapZoom = zoom;
+  };
+  MapShim.setOptions = (basemap = 'ROADMAP') => {
+    host.mapBasemap = String(basemap);
+  };
   g.Map = MapShim;
 
   const mkExport = (kind: string) => (params: Record<string, unknown>) => {
@@ -200,6 +221,7 @@ export function setupLocalHost(opts: LocalHostOptions = {}): LocalHost {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               get: (t, p: string | symbol): any => {
                 if (p === 'serialize' || p === 'getInfo') return () => ({ chartType: fullName });
+                if (p === 'evaluate') return (callback: (value: unknown) => void) => callback({ chartType: fullName });
                 if (p in t) return (t as Record<string | symbol, unknown>)[p];
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 return (..._a: any[]) => proxy;
@@ -270,6 +292,13 @@ async function runScriptBody(absPath: string, code: string, opts: RunScriptOptio
   if (!opts.ready) await ensureReady();
   await Promise.resolve(runInScriptContext(code, absPath, opts));
   await Promise.all(host.pendingPrints);
+  host.mapOutput = await renderMap({
+    layers: host.layers,
+    region: host.mapRegion,
+    center: host.mapCenter,
+    zoom: host.mapZoom,
+    basemap: host.mapBasemap,
+  }, absPath);
   return host;
 }
 
@@ -294,11 +323,15 @@ export async function runScripts(
 export async function runCode(code: string, opts: RunScriptOptions = {}): Promise<LocalHost> {
   const host = setupLocalHost(opts);
   if (!opts.ready) await ensureReady();
-  await Promise.resolve(runInScriptContext(
-    code,
-    path.join(process.cwd(), '.<gee-inline>.js'),
-    opts,
-  ));
+  const filename = path.join(process.cwd(), '.<gee-inline>.js');
+  await Promise.resolve(runInScriptContext(code, filename, opts));
   await Promise.all(host.pendingPrints);
+  host.mapOutput = await renderMap({
+    layers: host.layers,
+    region: host.mapRegion,
+    center: host.mapCenter,
+    zoom: host.mapZoom,
+    basemap: host.mapBasemap,
+  }, filename);
   return host;
 }

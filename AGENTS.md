@@ -37,7 +37,7 @@ node bin/ee submit --dry-run \
 ```
 src/
   ee.js / auth.js     唯一 EE 实例；鉴权 + getInfo
-  export/             export.ts / export-image.ts / export-tile.js / batches / tasks
+  export/             export.ts / export-image.ts / export-tile.js / utilize.ts / batches / tasks
   data/               本地 catalog / 日期范围筛选 / Julia worker
   local/              local-host / runtime / gee-require / pkg-add / config
   cli/
@@ -56,6 +56,8 @@ test/                 离线单测
 ```
 
 ## 极简代码设计
+
+详细原则见 [`MINIMAL_CODE_DESIGN.md`](MINIMAL_CODE_DESIGN.md)。
 
 - 主流程保持单向、线性；每一步输入输出明确。
 - 一个函数只做一件事；机制与业务规则分离。

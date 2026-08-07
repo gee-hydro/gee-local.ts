@@ -9,12 +9,14 @@ const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const { ee } = require('./ee');
 const { OAuth2Client } = require('google-auth-library');
+const EE_VERSION = require('@google/earthengine/package.json').version;
 
 const HOME = process.env[process.platform === 'win32' ? 'USERPROFILE' : 'HOME'];
 const CREDENTIALS = `${HOME}/.config/earthengine/credentials`;
 const PRIVATE_KEY = `${HOME}/.config/earthengine/.private-key.json`;
 const CACHE_DIR = `${process.env.XDG_CACHE_HOME || `${HOME}/.cache`}/gee-helper`;
 const TOKEN_CACHE = `${CACHE_DIR}/access-token.json`;
+const ALGORITHMS_CACHE = `${CACHE_DIR}/algorithms.json`;
 const EXPIRY_SKEW_MS = 60_000;
 /** earthengine CLI 默认 OAuth client（与 `earthengine authenticate` 一致） */
 const EE_CLIENT_ID = '517222506229-vsmmajv00ul0bs7p89v5m89qs8eb9359.apps.googleusercontent.com';
@@ -41,18 +43,69 @@ function readTokenCache(id) {
   }
 }
 
-function writeTokenCache(id, token, expiresIn) {
-  const tmp = `${TOKEN_CACHE}.${process.pid}.tmp`;
+function writeCache(file, value) {
+  const tmp = `${file}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(tmp, `${JSON.stringify({
-      credential_id: id,
-      access_token: token,
-      expires_at: Date.now() + expiresIn * 1000,
-    })}\n`, { mode: 0o600 });
-    fs.renameSync(tmp, TOKEN_CACHE);
+    fs.writeFileSync(tmp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+    fs.renameSync(tmp, file);
   } catch {
     try { fs.unlinkSync(tmp); } catch { /* 缓存失败不影响鉴权 */ }
+  }
+}
+
+function writeTokenCache(id, token, expiresIn) {
+  writeCache(TOKEN_CACHE, {
+    credential_id: id,
+    access_token: token,
+    expires_at: Date.now() + expiresIn * 1000,
+  });
+}
+
+function readAlgorithmsCache() {
+  try {
+    const cache = JSON.parse(fs.readFileSync(ALGORITHMS_CACHE, 'utf8'));
+    return cache.ee_version === EE_VERSION && cache.algorithms &&
+      typeof cache.algorithms === 'object' ? cache.algorithms : null;
+  } catch {
+    return null;
+  }
+}
+
+function initializeEe(project, success, failure, useCache = true) {
+  const original = ee.data.getAlgorithms;
+  if (typeof original !== 'function') {
+    ee.initialize(null, null, success, failure, null, project);
+    return;
+  }
+
+  const cached = useCache ? readAlgorithmsCache() : null;
+  const restore = () => { ee.data.getAlgorithms = original; };
+  ee.data.getAlgorithms = (callback) => {
+    if (cached) return callback(cached);
+    return original.call(ee.data, (algorithms, error) => {
+      if (algorithms && !error) {
+        writeCache(ALGORITHMS_CACHE, { ee_version: EE_VERSION, algorithms });
+      }
+      callback(algorithms, error);
+    });
+  };
+
+  const fail = (error) => {
+    restore();
+    if (!cached) {
+      failure(error);
+      return;
+    }
+    try { fs.unlinkSync(ALGORITHMS_CACHE); } catch { /* 忽略 */ }
+    if (typeof ee.reset === 'function') ee.reset();
+    Promise.resolve().then(() => initializeEe(project, success, failure, false));
+  };
+
+  try {
+    ee.initialize(null, null, () => { restore(); success(); }, fail, null, project);
+  } catch (error) {
+    fail(error);
   }
 }
 
@@ -86,10 +139,11 @@ function ensureReady() {
       const key = require(PRIVATE_KEY);
       ee.data.authenticateViaPrivateKey(
         key,
-        () => ee.initialize(null, null,
+        () => initializeEe(
+          key.client_email?.split('@')[1]?.split('.')[0],
           () => { console.log('[gee] ready (service-account)'); resolve(); },
           (e) => fail(new Error(`ee.initialize: ${e}`)),
-          null, key.client_email?.split('@')[1]?.split('.')[0]),
+        ),
         (e) => fail(new Error(`private-key auth: ${e}`)),
       );
       return;
@@ -132,10 +186,11 @@ function ensureReady() {
           undefined,
           false,
         );
-        ee.initialize(null, null,
+        initializeEe(
+          o2.project,
           () => { console.log('[gee] ready (OAuth)'); resolve(); },
           (e) => fail(new Error(`ee.initialize: ${e}`)),
-          null, o2.project);
+        );
       })
       .catch((e) => fail(new Error(`refresh_token: ${e.message || e}`)));
   });

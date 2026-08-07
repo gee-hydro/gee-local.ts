@@ -5,10 +5,12 @@ function makeCrsTransform(bounds, cellsize) {
   ];
 }
 
-function resampleOptions(bounds, cellsize_target) {
+function resampleOptions(
+  bounds,
+  cellsize_target,
+  cellsize_source = 1 / 3600,
+) {
   var region = ee.Geometry.Rectangle(bounds, 'EPSG:4326', false);
-  // WGS84 局部网格：源数据名义 30 m，输出名义 90 m。
-  var cellsize_source = 1 / 3600;
   return {
     crs: 'EPSG:4326',
     region: region,

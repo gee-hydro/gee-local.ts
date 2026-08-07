@@ -17,10 +17,12 @@ shp
 .ipynb_checkpoints
 *.ipynb
 
+*.csv
 *.tmp
 *.png
 *.tif
 *.gif
+maps/
 
 Project_DanJiangKou/*
 !Project_DanJiangKou/*.js
@@ -31,3 +33,5 @@ Manifest.toml
 
 *.pdf
 *.typ
+
+*.xml

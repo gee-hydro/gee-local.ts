@@ -14,6 +14,7 @@ DRY_RUN=1 ./examples/RunALL.sh  # export 仅计划
 node bin/ee examples/hello.js
 node bin/ee examples/smap-mean.js
 node bin/ee examples/modis-ndvi.js
+node bin/ee examples/qinhuangdao-latest-lst.js
 
 # require：内置 / 相对路径 / packages 包
 node bin/ee examples/with-require.js
@@ -53,6 +54,17 @@ ee config get packages
 | `require-pkg.js` | 裸名 / 嵌套 / users:mod |
 | `require-smap.js` | 包 + 真实 SMAP 查询 |
 | `smap-mean.js` / `modis-ndvi.js` | 纯 Code Editor 风格 |
+| `qinhuangdao-latest-lst.js` | Landsat 7/8/9 联合检索最新地表温度 |
+| `qinhuangdao-lst-availability.js` | 检索 2026 年 1—9 月可用 LST，输出逐景及月平均 CSV |
+
+### 秦皇岛地表温度验证记录
+
+2026-08-06 本地实测通过：Landsat 7/8/9 联合检索到 293 景候选影像；最新有效影像为 Landsat 9（2026-07-29，产品 `LC09_L2SP_121032_20260729_20260730_02_T1`），秦皇岛市有效像元比例为 0.5485。交互式地图和温度直方图均成功创建。
+
+本地运行同时输出：
+
+- 数据：`data/qinhuangdao_lst/Qinhuangdao_Landsat_LST_<date>_90m.tif`
+- 地图：`maps/qinhuangdao_latest_lst.html`（MapLibre 交互式图层）
 
 ## 库 API 本地下载
 

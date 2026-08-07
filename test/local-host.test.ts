@@ -77,12 +77,23 @@ test('Map.addLayer / centerObject / setCenter 不崩', () => {
   const host = setupLocalHost({ echo: false });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Map: any = (globalThis as any).Map;
-  Map.addLayer('img', { min: 0, max: 100 }, 'layer1');
+  Map.addLayer('img', { min: 0, max: 100 }, 'layer1', false, 0.5);
   Map.centerObject('img');
   Map.setCenter(105, 35, 4);
+  Map.setZoom(5);
   Map.setOptions('SATELLITE');
   assert.equal(host.layers.length, 1);
-  assert.deepEqual(host.layers[0], { image: 'img', vis: { min: 0, max: 100 }, name: 'layer1' });
+  assert.deepEqual(host.layers[0], {
+    image: 'img',
+    vis: { min: 0, max: 100 },
+    name: 'layer1',
+    shown: false,
+    opacity: 0.5,
+  });
+  assert.deepEqual(host.mapCenter, [105, 35]);
+  assert.equal(host.mapZoom, 5);
+  assert.equal(host.mapBasemap, 'SATELLITE');
+  assert.equal(host.mapRegion, undefined);
 });
 
 test('Export.image.toDrive / toAsset / toCloudStorage 全捕获', () => {

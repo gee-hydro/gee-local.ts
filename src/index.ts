@@ -21,6 +21,13 @@ export type {
 } from './export/export.js';
 export { mkpath } from './export/utilize.js';
 export { resample, resampleOptions } from './export/resample.js';
+export * as SurfaceWater_HLS from './dataset/SurfaceWater_HLS.js';
+export type {
+  BaseOptions as SurfaceWaterHlsOptions,
+  BuildWater as SurfaceWaterBuildWater,
+  DownloadOptions as SurfaceWaterHlsDownloadOptions,
+  ValidOptions as SurfaceWaterHlsFracValidOptions,
+} from './dataset/SurfaceWater_HLS.js';
 import col_frac_valid = require('./export/frac_valid.js');
 export { col_frac_valid };
 export { frameCollection } from './export/frame-collection';

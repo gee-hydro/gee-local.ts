@@ -12,6 +12,7 @@ const credentialsPath = `${offlineHome}/.config/earthengine/credentials`;
 const privateKeyPath = `${offlineHome}/.config/earthengine/.private-key.json`;
 const cacheDir = `${offlineHome}/.cache/gee-helper`;
 const tokenCachePath = `${cacheDir}/access-token.json`;
+const algorithmsCachePath = `${cacheDir}/algorithms.json`;
 
 type EeInitModule = {
   ensureReady(): Promise<void>;
@@ -32,6 +33,7 @@ type LoadOptions = {
   ee: object;
   OAuth2Client: new (clientId: string, clientSecret: string) => object;
   privateKey?: object;
+  eeVersion?: string;
 };
 
 function loadAuth(options: LoadOptions): EeInitModule {
@@ -41,6 +43,9 @@ function loadAuth(options: LoadOptions): EeInitModule {
     if (id === 'node:fs') return options.fs;
     if (id === './ee') return { ee: options.ee };
     if (id === 'google-auth-library') return { OAuth2Client: options.OAuth2Client };
+    if (id === '@google/earthengine/package.json') {
+      return { version: options.eeVersion ?? '1.7.37' };
+    }
     if (id === privateKeyPath && options.privateKey) return options.privateKey;
     throw new Error(`unexpected require: ${id}`);
   };
@@ -259,6 +264,80 @@ test('OAuth credentials 安装 token refresher、设置 auth token 并完成 ini
   assert.equal(oauthInstances[1].accessTokenCalls, 0);
   assert.equal(setAuthTokenArgs?.[2], 'refreshed-access-token');
   assert.ok(Number(setAuthTokenArgs?.[3]) > 1700);
+});
+
+test('算法注册表按 Earth Engine JS 版本缓存', async () => {
+  const privateKey = { client_email: 'viewer@cache-project.iam.gserviceaccount.com' };
+  const algorithms = { 'Image.add': { args: [], description: 'add', returns: 'Image' } };
+  const files = new Map<string, string>();
+  let requests = 0;
+  const fs: FakeFs = {
+    existsSync: (path) => path === privateKeyPath || files.has(path),
+    readFileSync: (path) => {
+      const value = files.get(path);
+      if (value == null) throw new Error(`missing file: ${path}`);
+      return value;
+    },
+    mkdirSync: () => undefined,
+    writeFileSync: (path, data) => files.set(path, data),
+    renameSync: (from, to) => {
+      const value = files.get(from);
+      if (value == null) throw new Error(`missing file: ${from}`);
+      files.set(to, value);
+      files.delete(from);
+    },
+    unlinkSync: (path) => { files.delete(path); },
+  };
+  const ee = {
+    data: {
+      authenticateViaPrivateKey(
+        _key: object,
+        success: () => void,
+      ) {
+        queueMicrotask(success);
+      },
+      getAlgorithms(callback: (value: object) => void) {
+        requests += 1;
+        callback(algorithms);
+      },
+    },
+    initialize(
+      _baseUrl: unknown,
+      _tileUrl: unknown,
+      success: () => void,
+    ) {
+      this.data.getAlgorithms(success);
+    },
+  };
+
+  await loadAuth({
+    fs,
+    ee,
+    OAuth2Client: UnusedOAuth2Client,
+    privateKey,
+    eeVersion: '1.0.0',
+  }).ensureReady();
+  await loadAuth({
+    fs,
+    ee,
+    OAuth2Client: UnusedOAuth2Client,
+    privateKey,
+    eeVersion: '1.0.0',
+  }).ensureReady();
+
+  assert.equal(requests, 1);
+  assert.equal(JSON.parse(files.get(algorithmsCachePath) ?? '{}').ee_version, '1.0.0');
+
+  await loadAuth({
+    fs,
+    ee,
+    OAuth2Client: UnusedOAuth2Client,
+    privateKey,
+    eeVersion: '2.0.0',
+  }).ensureReady();
+
+  assert.equal(requests, 2);
+  assert.equal(JSON.parse(files.get(algorithmsCachePath) ?? '{}').ee_version, '2.0.0');
 });
 
 test('initialize 失败后清空 readyPromise，下一次 ensureReady 会重试', async () => {
