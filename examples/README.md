@@ -59,6 +59,8 @@ ee config get packages
 | `hubei-water-fraction.js` | JRC GSW 湖北省 1/120° 水体比例与二值水体 |
 | `polygonize-hubei-water.jl` | 按 `frac_water` 阈值生成 Shapefile |
 | `validate-hubei-water-shapefile.R` | 验证并绘制水体 Shapefile |
+| `hubei-srtm-dem.js` | 下载湖北省 SRTM 30 m、250 m 和 1 km 高程 |
+| `plot-hubei-terrain-water.py` | 绘制山区—平原—湖区地貌水体示意图 |
 
 ### 秦皇岛地表温度验证记录
 
@@ -88,6 +90,13 @@ Rscript examples/validate-hubei-water-shapefile.R \
   "$TIF" data/hubei_water_fraction/Hubei_JRC_GSW_water_frac_gt_0.3.shp \
   data/hubei_water_fraction/Hubei_JRC_GSW_water_frac_gt_0.3_validation.csv \
   images/hubei-water-shapefile-frac-gt-0.3.png 0.3
+
+# SRTM 高程与三类地貌区示意图
+node bin/ee examples/hubei-srtm-dem.js
+/opt/miniforge3/envs/r4.5/bin/python examples/plot-hubei-terrain-water.py \
+  data/hubei_dem/Hubei_SRTMGL1_elevation_250m.tif \
+  data/hubei_water_fraction/Hubei_JRC_GSW_water_frac_gt_0.3.shp \
+  images/hubei-terrain-water-regions.png
 ```
 
 ## 库 API 本地下载

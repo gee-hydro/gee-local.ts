@@ -45,6 +45,23 @@ function mergeTiles(tiles, filename, tiling, host) {
   host.gdalWarp(args);
 }
 
+async function mapConcurrent(items, concurrency, task) {
+  var cursor = 0;
+  var results = new Array(items.length);
+  async function worker() {
+    while (cursor < items.length) {
+      var index = cursor;
+      cursor += 1;
+      results[index] = await task(items[index], index);
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.min(concurrency, items.length) },
+    worker,
+  ));
+  return results;
+}
+
 async function exportTiles({
   downloadFile, filename, getDownloadParams, host, image, name, options,
 }) {
@@ -54,12 +71,16 @@ async function exportTiles({
   );
   try {
     var regions = makeTileRegions(options.tiling);
-    var tiles = await Promise.all(regions.map(function (region, index) {
+    var concurrency = options.tiling.concurrency || regions.length;
+    if (!Number.isInteger(concurrency) || concurrency < 1) {
+      throw new Error('tiling.concurrency 须为正整数');
+    }
+    var tiles = await mapConcurrent(regions, concurrency, function (region, index) {
       var tileName = name + '_tile_' + index;
       var tileFile = path.join(temporary, tileName + '.tif');
       var params = getDownloadParams(tileName, region, options);
       return downloadFile(image, tileFile, options, params, host);
-    }));
+    });
     mergeTiles(tiles, filename, options.tiling, host);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });

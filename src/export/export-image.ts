@@ -18,6 +18,10 @@ export function getDownloadParams(
   };
 }
 
+function retryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+}
+
 async function download_file(
   image: unknown,
   filename: string,
@@ -29,7 +33,18 @@ async function download_file(
   let last_error = '';
 
   for (let attempt = 0; attempt < retries; attempt += 1) {
-    const url = await host.getDownloadUrl(image, params);
+    let url: string;
+    try {
+      url = await host.getDownloadUrl(image, params);
+    } catch (error) {
+      last_error = error instanceof Error ? error.message : String(error);
+      const transient = /socket hang up|Invalid JSON|ECONNRESET|ETIMEDOUT/i
+        .test(last_error);
+      if (!transient || attempt + 1 >= retries) throw error;
+      await retryDelay(attempt);
+      continue;
+    }
+
     try {
       const response = await (options.fetch || fetch)(url);
       if (response.ok) {
@@ -46,11 +61,7 @@ async function download_file(
       last_error = error instanceof Error ? error.message : String(error);
     }
 
-    if (attempt + 1 < retries) {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 2000 * Math.pow(2, attempt));
-      });
-    }
+    if (attempt + 1 < retries) await retryDelay(attempt);
   }
   throw new Error('下载失败：' + path.basename(filename) + ': ' + last_error);
 }
