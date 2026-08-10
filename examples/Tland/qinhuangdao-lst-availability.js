@@ -84,8 +84,8 @@ print('可用影像', rows);
 /** 本地 gee-helper：保存查询结果；以上代码可直接复制到 Code Editor。 */
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
-  var path = require('node:path');
   var pkg = require('../dist/index.js');
+  var path = pkg.path;
   var scriptDir = __dirname;
   pkg.getInfo(rows).then(function (values) {
     var outdir = path.join(scriptDir, '..', 'data', 'qinhuangdao_lst');

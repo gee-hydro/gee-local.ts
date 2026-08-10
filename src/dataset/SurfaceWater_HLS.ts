@@ -9,9 +9,9 @@ import {
   type Collection,
   type DownloadOptions as ExportDownloadOptions,
   type Group,
-} from '../export/export-col.js';
-import col_frac_valid = require('../export/frac_valid.js');
-import { resample, resampleOptions } from '../export/resample.js';
+} from '../export/export-col';
+import col_frac_valid = require('../export/frac_valid');
+import { resample, resampleOptions } from '../export/resample';
 
 export interface ImageCollection extends Collection {
   filter(filter: unknown): ImageCollection;

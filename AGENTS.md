@@ -70,24 +70,7 @@ test/                 离线单测
 
 ## 修改原则
 
-- TypeScript 严格类型；单引号、分号、空格、尾随逗号
-- 保持 CommonJS；CLI 构建后须可由 `node bin/ee` 直接运行
-- 禁止另行导入或初始化 Earth Engine；统一 `src/ee.ts`
-- `auth.js` 不记录 token、refresh token 或私钥内容
-- 凭证优先级：private key → Earth Engine OAuth credentials
-- 导出时间区间为闭区间；native 模式必须显式提供正 `stepHours`
-- `local-host` 修改后须验证内置 `Map` 构造器兼容性及全局清理
-- CLI 入口保持懒加载：`help` / `config` / `add` / `data` 不得静态依赖 EE
-- 本地数据注册：`ee data register` → `catalog/local.json`；格式 `tif`（SpatialRasterLite/ArchGDAL）与 `nc`（NCDatasets 三维时空）
-- 本地处理：`julia/gee_local_worker.jl`；用户函数 `apply(ra::SpatRaster; params...)`，`ra.A` 为 2D/3D
-- 自定义指标写 `.jl` 后 `ee data apply --fn ...`
-- GEE 包 `require` 须带 `.js`（Code Editor 语法）；`users/x/y:mod.js` → `packages/users/x/y/mod.js`
-- 同一脚本兼容 GEE Code Editor 与本地 GEE 时，两部分代码必须分开：标准 GEE JavaScript 置于文件最上方，本地专用代码集中置于其后，避免交错，确保主体代码可直接复制到 GEE Code Editor
-- 函数不得隐式读取业务全局变量；区域、时间、阈值、网格、集合和输出路径等依赖须通过参数显式传入
-- 本地下载地址统一由 `_host.getDownloadUrl(image, params)` 获取，脚本不得重复封装 `Image.getDownloadURL`
-- GEE CRS 变换参数对外统一使用 `crsTransform`；仅构造 `Image.getDownloadURL` 请求时转换为 `crs_transform`，`Export.image.*` 仍传 `crsTransform`，不得混用
-- 本地运行、地图与导出约定见 [`docs/local-runtime.md`](docs/local-runtime.md)；修改相关流程时同步更新文档与测试
-- packages 路径优先级：`--package-path` > `$GEE_JS_PATH` > config > `./packages`
-- 不把 server 数据源注册表引入本包；CLI 使用 collection/band/scale/temporal
-- 数据本地导出优先使用 `/mnt/z/GitHub/gee-hydro/gee-export`，其效率更高
-- 修改公共 API、CLI 参数或 job manifest 时同步更新 README、相关 docs 与测试
+- TypeScript 严格类型；使用单引号、分号和 2 空格缩进，不使用尾随逗号
+- 保持 CommonJS 与 CLI 懒加载；`src` 内使用无扩展名导入，统一复用 `src/ee.ts`
+- GEE 包路径须带 `.js`；兼容脚本中，标准 GEE 代码在前，本地专用代码在后
+- 导出时间区间为闭区间，native 模式须提供正 `stepHours`；本地运行与导出遵循 [`docs/local-runtime.md`](docs/local-runtime.md)，相关改动同步更新文档与测试

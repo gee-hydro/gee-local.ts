@@ -27,22 +27,19 @@ function annualValidCount(year) {
 }
 
 if (typeof module !== 'undefined') {
-  var path = require('node:path');
   var pkg = require('../../dist/index.js');
   var startYear = Number(process.env.START_YEAR || 2015);
   var endYear = Number(process.env.END_YEAR || 2025);
-  var outdir = path.resolve('data/china_s1_annual_availability_025deg');
+  var outdir = pkg.path.resolve('data/china_s1_annual_availability_025deg');
 
   function exportImage(group) {
+    var img = annualValidCount(year).unmask(noData, false);
     var year = Number(group.key);
-    var filename = path.join(
+    var filename = pkg.path.join(
       outdir,
       'China_S1_IW_VVVH_valid_count_' + year + '_025deg.tif',
     );
-    return pkg.export_img(
-      annualValidCount(year).unmask(noData, false),
-      filename,
-      {
+    return pkg.export_img(img, filename, {
         outdir: outdir,
         region: extent,
         cellsize: cellsize,

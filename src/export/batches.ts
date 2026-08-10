@@ -229,7 +229,6 @@ async function downloadUrl(opts: ExportBatchesOptions, start: string, end: strin
       region: regionGeometry(opts.bounds),
       scale: opts.scale,
       crs: opts.crs,
-      filePerBand: false,
       format: 'GEO_TIFF',
     }, (url: string | null, error?: string) => {
       if (!url) reject(new Error(`GeoTIFF 下载地址生成失败: ${error ?? 'empty'}`));

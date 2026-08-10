@@ -9,9 +9,9 @@ export { validateCacheBounds, type CacheBounds } from './export/bounds';
 export {
   export_col,
   export_img,
-  getDownloadParams,
+  export_img_grids,
   listGroups,
-} from './export/export-col.js';
+} from './export/export-col';
 export type {
   Collection,
   DownloadOptions,
@@ -19,17 +19,17 @@ export type {
   Group,
   GroupOptions,
   TilingOptions,
-} from './export/export-col.js';
-export { mkpath } from './export/utilize.js';
-export { resample, resampleOptions } from './export/resample.js';
-export * as SurfaceWater_HLS from './dataset/SurfaceWater_HLS.js';
+} from './export/export-col';
+export { mkpath } from './export/utilize';
+export { resample, resampleOptions } from './export/resample';
+export * as SurfaceWater_HLS from './dataset/SurfaceWater_HLS';
 export type {
   BaseOptions as SurfaceWaterHlsOptions,
   BuildWater as SurfaceWaterBuildWater,
   DownloadOptions as SurfaceWaterHlsDownloadOptions,
   ValidOptions as SurfaceWaterHlsFracValidOptions,
-} from './dataset/SurfaceWater_HLS.js';
-import col_frac_valid = require('./export/frac_valid.js');
+} from './dataset/SurfaceWater_HLS';
+import col_frac_valid = require('./export/frac_valid');
 export { col_frac_valid };
 export { frameCollection } from './export/frame-collection';
 export {

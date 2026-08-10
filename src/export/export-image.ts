@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { runtime } from '../local/runtime.js';
-import type { DownloadOptions } from './export-col.js';
-import { exportTiles } from './export-tile.js';
-import { log } from './utilize.js';
+import { runtime } from '../local/runtime';
+import type { DownloadOptions } from './export-col';
+import { makeTileRegions, mergeTiles } from './export-tile';
+import { log, mapConcurrent } from './utilize';
 
 type GetDownloadUrlGridParams = {
   region?: unknown;
@@ -15,7 +15,7 @@ type GetDownloadUrlGridParams = {
 
 function getGridParams(
   region: unknown,
-  options: DownloadOptions,
+  options: DownloadOptions
 ): GetDownloadUrlGridParams {
   const params: GetDownloadUrlGridParams = { region };
   if (options.crs != null) params.crs = options.crs;
@@ -35,21 +35,8 @@ function getGridParams(
     crs_transform: [cellsize, 0, xmin, 0, -cellsize, ymax],
     dimensions: [
       Math.round((xmax - xmin) / cellsize),
-      Math.round((ymax - ymin) / cellsize),
-    ],
-  };
-}
-
-export function getDownloadParams(
-  name: string,
-  region: unknown,
-  options: DownloadOptions,
-): Record<string, unknown> {
-  return {
-    name,
-    format: options.format ?? 'GEO_TIFF',
-    filePerBand: options.filePerBand ?? false,
-    ...getGridParams(region, options),
+      Math.round((ymax - ymin) / cellsize)
+    ]
   };
 }
 
@@ -60,81 +47,73 @@ function retryDelay(attempt: number): Promise<void> {
 async function downloadFile(
   image: unknown,
   filename: string,
-  options: DownloadOptions,
-  params: Record<string, unknown>,
+  options: DownloadOptions
 ): Promise<string> {
   const host = runtime()._host;
   if (!host) throw new Error('本地导出宿主未初始化');
 
+  const params = {
+    name: path.basename(filename, path.extname(filename)),
+    format: options.format ?? 'GEO_TIFF',
+    ...getGridParams(options.region, options)
+  };
   const retries = options.retries ?? 3;
-  let lastError = '';
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    let url: string;
+  fs.mkdirSync(path.dirname(filename), { recursive: true });
+  for (let attempt = 0; ; attempt += 1) {
     try {
-      url = await host.getDownloadUrl(image, params);
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-      const transient = /socket hang up|Invalid JSON|ECONNRESET|ETIMEDOUT/i
-        .test(lastError);
-      if (!transient || attempt + 1 >= retries) throw error;
-      await retryDelay(attempt);
-      continue;
-    }
-
-    try {
+      const url = await host.getDownloadUrl(image, params);
       const response = await (options.fetch ?? fetch)(url);
-      if (response.ok) {
-        fs.mkdirSync(path.dirname(filename), { recursive: true });
-        fs.writeFileSync(filename, Buffer.from(await response.arrayBuffer()));
-        return filename;
-      }
-
-      lastError = typeof response.text === 'function'
-        ? await response.text()
-        : 'HTTP ' + response.status;
-      if (response.status !== 429 && response.status !== 503) break;
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      fs.writeFileSync(filename, Buffer.from(await response.arrayBuffer()));
+      return filename;
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      if (attempt + 1 >= retries) throw error;
+      await retryDelay(attempt);
     }
-
-    if (attempt + 1 < retries) await retryDelay(attempt);
   }
-  throw new Error('下载失败：' + path.basename(filename) + ': ' + lastError);
 }
 
 export async function export_img(
   image: unknown,
   filename: string,
-  options: DownloadOptions,
+  options: DownloadOptions
 ): Promise<string> {
-  const name = path.basename(filename, path.extname(filename));
   if (fs.existsSync(filename)) {
-    log(options, '跳过：' + path.basename(filename));
-    return filename;
+    return filename; // 跳过
   }
 
-  if (options.tiling) {
-    await exportTiles({
-      filename,
-      name,
-      outdir: options.outdir,
-      tiling: options.tiling,
-      download: (region, tileName, tileFile) => downloadFile(
-        image,
-        tileFile,
-        options,
-        getDownloadParams(tileName, region, options),
-      ),
-    });
-  } else {
-    await downloadFile(
-      image,
-      filename,
-      options,
-      getDownloadParams(name, options.region, options),
-    );
-  }
+  if (options.tiling) await export_img_grids(image, filename, options);
+  else await downloadFile(image, filename, options);
 
   log(options, '完成：' + path.basename(filename));
   return filename;
+}
+
+
+export async function export_img_grids(
+  image: unknown,
+  filename: string,
+  options: DownloadOptions
+): Promise<string> {
+  const tiling = options.tiling!;
+  const regions = makeTileRegions(tiling);
+  const name = path.basename(filename, path.extname(filename));
+  const outdir = path.dirname(filename);
+  const tiles = regions.map((_, index) =>
+    path.join(outdir, name + '_tile_' + index + '.tif'));
+  fs.mkdirSync(outdir, { recursive: true });
+
+  try {
+    await mapConcurrent(
+      regions,
+      tiling.concurrency ?? regions.length,
+      (region, index) => downloadFile(image, tiles[index],
+        { ...options, region }
+      )
+    );
+    mergeTiles(tiles, filename, tiling);
+    return filename;
+  } finally {
+    tiles.forEach((tile) => fs.rmSync(tile, { force: true }));
+  }
 }

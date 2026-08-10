@@ -1,23 +1,8 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { ee } from '../ee';
-import { runtime } from '../local/runtime.js';
-import type { TilingOptions } from './export-col.js';
-import { mapConcurrent } from './utilize.js';
+import { runtime } from '../local/runtime';
+import type { TilingOptions } from './export-col';
 
-type ExportTilesOptions = {
-  filename: string;
-  name: string;
-  outdir: string;
-  tiling: TilingOptions;
-  download(
-    region: unknown,
-    name: string,
-    filename: string,
-  ): Promise<string>;
-};
-
-function makeTileRegions(tiling: TilingOptions): unknown[] {
+export function makeTileRegions(tiling: TilingOptions): unknown[] {
   const [xmin, ymin, xmax, ymax] = tiling.bounds;
   const rows = tiling.rows ?? 1;
   const cols = tiling.cols ?? 1;
@@ -32,25 +17,26 @@ function makeTileRegions(tiling: TilingOptions): unknown[] {
           xmin + width * col,
           ymin + height * row,
           xmin + width * (col + 1),
-          ymin + height * (row + 1),
+          ymin + height * (row + 1)
         ],
         tiling.crs ?? 'EPSG:4326',
-        false,
+        false
       ));
     }
   }
   return regions;
 }
 
-function mergeTiles(
+export function mergeTiles(
   tiles: string[],
   filename: string,
-  tiling: TilingOptions,
+  tiling: TilingOptions
 ): void {
   const host = runtime()._host;
   if (!host?.gdalWarp) {
     throw new Error('gdalWarp 仅在 gee-helper 本地运行时可用');
   }
+
   const [xmin, ymin, xmax, ymax] = tiling.bounds;
   const [width, height] = tiling.dimensions;
   host.gdalWarp([
@@ -63,33 +49,6 @@ function mergeTiles(
     '-ot', tiling.dataType ?? 'Float32',
     '-co', 'TILED=YES', '-co', 'COMPRESS=DEFLATE',
     ...tiles,
-    filename,
+    filename
   ]);
-}
-
-export async function exportTiles({
-  filename,
-  name,
-  outdir,
-  tiling,
-  download,
-}: ExportTilesOptions): Promise<void> {
-  const regions = makeTileRegions(tiling);
-  fs.mkdirSync(outdir, { recursive: true });
-  const temporary = fs.mkdtempSync(path.join(outdir, '.tmp-' + name + '-'));
-
-  try {
-    const tiles = await mapConcurrent(
-      regions,
-      tiling.concurrency ?? regions.length,
-      (region, index) => {
-        const tileName = name + '_tile_' + index;
-        const tileFile = path.join(temporary, tileName + '.tif');
-        return download(region, tileName, tileFile);
-      },
-    );
-    mergeTiles(tiles, filename, tiling);
-  } finally {
-    fs.rmSync(temporary, { recursive: true, force: true });
-  }
 }

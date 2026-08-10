@@ -109,9 +109,9 @@ print(ui.Chart.image.histogram({
 
 /** 本地 gee-helper：保存 90 m GeoTIFF；以上代码可直接复制到 Code Editor。 */
 if (typeof module !== 'undefined') {
-  var path = require('node:path');
   var childProcess = require('node:child_process');
   var pkg = require('../dist/index.js');
+  var path = pkg.path;
   var scriptDir = __dirname;
   var outdir = path.join(scriptDir, '..', 'data', 'qinhuangdao_lst');
 

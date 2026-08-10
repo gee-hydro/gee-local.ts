@@ -29,6 +29,7 @@ GEE 临时瓦片地址失效后，重新运行脚本即可。实现位于 `src/l
 
 ```js
 await pkg.export_img(image, filename, options);
+await pkg.export_img_grids(image, filename, options); // 切片下载并合并
 ```
 
 `_host.getDownloadUrl()`、`_host.gdalWarp()` 和 GDAL 调用均由模块内部获取，业务脚本不得重复封装。

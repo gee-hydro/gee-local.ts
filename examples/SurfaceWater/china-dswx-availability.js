@@ -55,8 +55,8 @@ function monthlyValidDays(year, month, targetRegion) {
 /** 本地 gee-helper：以上为标准 GEE JavaScript。 */
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
-  var path = require('node:path');
   var pkg = require('../../dist/index.js');
+  var path = pkg.path;
   var startYear = Number(process.env.START_YEAR || 2023);
   var endYear = Number(process.env.END_YEAR || 2026);
   var periodConcurrency = Number(process.env.CONCURRENCY || 1);

@@ -19,35 +19,56 @@ function mockCollection(indices, timestamps) {
   };
 }
 
-test('export_img 下载已构建的影像', async () => {
+test('export_img 生成参数并下载影像', async () => {
   const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gee-export-img-'));
   const image = {};
+  const params = [];
   const previousHost = global._host;
   global._host = {
-    getDownloadUrl(received, params) {
+    getDownloadUrl(received, value) {
       assert.equal(received, image);
-      assert.equal(params.name, 'test');
-      assert.equal(params.scale, 90);
+      params.push(value);
       return Promise.resolve('https://example.test/test.tif');
-    },
+    }
   };
+  const fetchImage = async () => ({
+    ok: true,
+    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer
+  });
 
   try {
-    const filename = await localExport.export_img(
-      image,
-      path.join(outdir, 'test.tif'),
-      {
-        outdir,
-        scale: 90,
-        log: false,
-        fetch: async () => ({
-          ok: true,
-          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-        }),
-      },
-    );
+    const region = [73, 18, 136, 54];
+    const transform = [463.3127, 0, -20015109, 0, -463.3127, 10007555];
+    const filename = path.join(outdir, 'test.tif');
+    await localExport.export_img(image, filename, {
+      outdir,
+      region,
+      cellsize: 0.25,
+      log: false,
+      fetch: fetchImage
+    });
+    await localExport.export_img(image, path.join(outdir, 'modis.tif'), {
+      outdir,
+      region,
+      crs: 'SR-ORG:6974',
+      crsTransform: transform,
+      log: false,
+      fetch: fetchImage
+    });
 
-    assert.equal(filename, path.join(outdir, 'test.tif'));
+    assert.deepEqual(params, [{
+      name: 'test',
+      format: 'GEO_TIFF',
+      crs: 'EPSG:4326',
+      crs_transform: [0.25, 0, 73, 0, -0.25, 54],
+      dimensions: [252, 144]
+    }, {
+      name: 'modis',
+      region,
+      format: 'GEO_TIFF',
+      crs: 'SR-ORG:6974',
+      crs_transform: transform
+    }]);
     assert.deepEqual([...fs.readFileSync(filename)], [1, 2, 3]);
   } finally {
     if (previousHost === undefined) delete global._host;
@@ -56,37 +77,7 @@ test('export_img 下载已构建的影像', async () => {
   }
 });
 
-test('getDownloadParams 生成 WGS84 网格并优先使用 crsTransform', () => {
-  const region = [73, 18, 136, 54];
-  assert.deepEqual(localExport.getDownloadParams('test', region, {
-    outdir: '/tmp',
-    cellsize: 0.25,
-  }), {
-    name: 'test',
-    format: 'GEO_TIFF',
-    filePerBand: false,
-    crs: 'EPSG:4326',
-    crs_transform: [0.25, 0, 73, 0, -0.25, 54],
-    dimensions: [252, 144],
-  });
-
-  const transform = [463.3127, 0, -20015109, 0, -463.3127, 10007555];
-  assert.deepEqual(localExport.getDownloadParams('modis', region, {
-    outdir: '/tmp',
-    cellsize: 0.25,
-    crs: 'SR-ORG:6974',
-    crsTransform: transform,
-  }), {
-    name: 'modis',
-    region,
-    format: 'GEO_TIFF',
-    filePerBand: false,
-    crs: 'SR-ORG:6974',
-    crs_transform: transform,
-  });
-});
-
-test('export_img 支持切片下载并用 GDAL 合并', async () => {
+test('export_img_grids 支持切片下载并用 GDAL 合并', async () => {
   const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gee-export-tiles-'));
   const previousRectangle = ee.Geometry.Rectangle;
   const previousHost = global._host;
@@ -109,7 +100,7 @@ test('export_img 支持切片下载并用 GDAL 合并', async () => {
   };
 
   try {
-    const filename = await localExport.export_img(
+    const filename = await localExport.export_img_grids(
       {},
       path.join(outdir, 'water_20240101.tif'),
       {

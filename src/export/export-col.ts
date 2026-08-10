@@ -1,4 +1,4 @@
-import { exportTaskInfo } from './taskInfo.js';
+import { exportTaskInfo } from './taskInfo';
 import {
   evaluate,
   log,
@@ -6,9 +6,9 @@ import {
   parsePeriod,
   splitGroups,
   type Group,
-} from './utilize.js';
+} from './utilize';
 
-export { export_img, getDownloadParams } from './export-image.js';
+export { export_img, export_img_grids } from './export-image';
 export type { Group };
 
 export type Collection = {
@@ -55,7 +55,6 @@ export type DownloadOptions = {
   outdir: string;
   region?: unknown;
   format?: string;
-  filePerBand?: boolean;
   scale?: number;
   cellsize?: number;
   crs?: string;
@@ -97,9 +96,9 @@ export async function listGroups(
   return maxGroups < 0 ? groups : groups.slice(0, maxGroups);
 }
 
-async function exportCollection(
+export async function export_col(
   collection: Collection,
-  options: ExportOptions,
+  options: ExportOptions
 ): Promise<void> {
   const concurrency = Number(options.concurrency ?? 4);
   if (!Number.isInteger(concurrency) || concurrency < 1) {
@@ -120,11 +119,4 @@ async function exportCollection(
     + Math.min(concurrency, groups.length));
   await mapConcurrent(groups, concurrency, options.exportImage);
   log(options, '下载完成');
-}
-
-export function export_col(
-  collection: Collection,
-  options: ExportOptions,
-): Promise<void> {
-  return exportCollection(collection, options);
 }

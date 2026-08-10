@@ -36,8 +36,8 @@ function annualValidCount(year, targetRegion) {
 /** 本地gee-helper：按年分块下载，全部成功后才生成最终文件。 */
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
-  var path = require('node:path');
   var pkg = require('../../dist/index.js');
+  var path = pkg.path;
   var scriptDir = __dirname;
   var startYear = Number(process.env.START_YEAR || 2015);
   var endYear = Number(process.env.END_YEAR || 2025);

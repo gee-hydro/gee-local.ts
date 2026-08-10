@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import { ee } from '../ee';
-import * as io from './IO.js';
-import * as util from './utilize.js';
+import * as io from './IO';
+import * as util from './utilize';
 
 type eeCollection = {
   filter(filter: unknown): unknown;

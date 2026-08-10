@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ee } from '../ee';
-import { csvCell, evaluate } from './utilize.js';
+import { csvCell, evaluate } from './utilize';
 
 type ImageCollection = {
   reduceColumns(

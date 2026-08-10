@@ -62,9 +62,9 @@ Export.image.toDrive({
 
 /** 本地 gee-helper：下载 GeoTIFF 并绘图；以上代码可直接复制到 Code Editor。 */
 if (typeof module !== 'undefined') {
-  var path = require('node:path');
   var childProcess = require('node:child_process');
   var pkg = require('../dist/index.js');
+  var path = pkg.path;
   var scriptDir = __dirname;
   var root = path.join(scriptDir, '..');
   var outdir = path.join(root, 'data', 'hubei_water_fraction');

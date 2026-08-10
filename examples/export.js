@@ -4,8 +4,9 @@
  *   ee examples/export.js
  *   DRY_RUN=1 ee examples/export.js
  */
-const path = require('node:path');
-const { exportBatches } = require('../dist/export/batches');
+const pkg = require('../dist');
+const path = pkg.path;
+const { exportBatches } = pkg;
 
 const dryRun = process.env.DRY_RUN === '1';
 const outdir = path.resolve(__dirname, '../cache/examples/smap');

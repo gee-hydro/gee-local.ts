@@ -49,8 +49,8 @@ Export.image.toDrive({
 /** 本地 gee-helper 下载；以上代码可直接复制到 Code Editor。 */
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
-  var path = require('node:path');
   var pkg = require('../dist/index.js');
+  var path = pkg.path;
   var root = path.join(__dirname, '..');
   var outdir = path.join(root, 'data', 'hubei_dem');
   var file30m = path.join(outdir, 'Hubei_SRTMGL1_elevation_30m.tif');
@@ -72,12 +72,12 @@ if (typeof module !== 'undefined') {
   }
 
   async function saveLocal() {
-    await pkg.export_img(dem1km.toFloat().unmask(noData, false), file1km, {
+    await pkg.export_img_grids(dem1km.toFloat().unmask(noData, false), file1km, {
       outdir: outdir,
       region: hubei,
       tiling: tiling(bounds, 1, 1, [926, 507], 'Float32', crs),
     });
-    await pkg.export_img(dem30m.toInt16().unmask(noData, false), file30m, {
+    await pkg.export_img_grids(dem30m.toInt16().unmask(noData, false), file30m, {
       outdir: outdir,
       region: hubei,
       retries: 5,
