@@ -174,5 +174,5 @@ if (typeof module !== 'undefined') {
     await runConcurrent(periods, periodConcurrency, exportPeriod);
   }
 
-  _host.pendingPrints.push(main());
+  main();
 }

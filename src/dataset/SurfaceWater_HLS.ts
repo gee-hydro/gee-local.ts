@@ -120,7 +120,13 @@ export async function download(col: ImageCollection, {
       .unmask(-9999, false)
       .clip(region);
     const filename = path.join(outdir, group.name + '.tif');
-    return export_img(image, filename, { outdir, region, tiling });
+    return export_img(image, filename, {
+      outdir,
+      region,
+      crs: grid.crs,
+      crsTransform: grid.crsTransform_target,
+      tiling,
+    });
   }
 
   await export_col(col, {

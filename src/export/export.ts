@@ -1,6 +1,5 @@
 import * as task_info from './taskInfo.js';
 import * as util from './utilize.js';
-import { runtime } from '../local/runtime.js';
 import { export_img, getDownloadParams } from './export-image.js';
 
 export { export_img, getDownloadParams };
@@ -31,8 +30,7 @@ type SceneRecord = {
   properties: string[];
 };
 
-export type ExportOptions = {
-  groups?: Group[];
+export type ExportOptions = GroupOptions & {
   concurrency?: number;
   exportImage: (group: Group) => unknown;
   sceneRecord?: SceneRecord;
@@ -44,6 +42,10 @@ export type DownloadOptions = {
   region?: unknown;
   format?: string;
   filePerBand?: boolean;
+  scale?: number;
+  cellsize?: number;
+  crs?: string;
+  crsTransform?: number[];
   retries?: number;
   tiling?: Record<string, unknown>;
   fetch?: typeof fetch;
@@ -109,7 +111,7 @@ async function export_collection(
     throw new Error('concurrency 须为正整数');
   }
 
-  const groups = options.groups || await listGroups(col, options as GroupOptions);
+  const groups = options.groups || await listGroups(col, options);
   if (options.sceneRecord) {
     await task_info.export_taskInfo(
       col,
@@ -130,18 +132,5 @@ export function export_col(
   col: Collection,
   options: ExportOptions,
 ): Promise<void> {
-  const host = runtime()._host;
-  runtime().print?.('原始影像数：', col.size());
-
-  const promise = export_collection(col, options);
-  if (!host) return promise;
-
-  const registered = promise.catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('下载失败：' + message);
-    process.exitCode = 1;
-    throw error;
-  });
-  host.pendingPrints.push(registered);
-  return registered;
+  return export_collection(col, options);
 }

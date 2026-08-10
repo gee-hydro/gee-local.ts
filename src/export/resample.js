@@ -25,15 +25,10 @@ function resample(mosaic, options) {
     options.crsTransform_source,
   ); // ! 必须指定，mosaic之后projection信息丢失
 
-  return mosaic
-    .reduceResolution({
-      reducer: ee.Reducer.mean(),
-      maxPixels: 1024,
-    })
-    .reproject({
-      crs: 'EPSG:4326',
-      crsTransform: options.crsTransform_target,
-    });
+  return mosaic.reduceResolution({
+    reducer: ee.Reducer.mean(),
+    maxPixels: 1024,
+  });
 }
 
 module.exports = {

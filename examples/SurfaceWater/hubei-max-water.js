@@ -79,5 +79,5 @@ if (typeof module !== 'undefined') {
     );
   }
 
-  _host.pendingPrints.push(saveLocal());
+  saveLocal();
 }

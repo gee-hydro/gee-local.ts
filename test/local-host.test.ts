@@ -176,19 +176,21 @@ test('runInScriptContext 注入 require/module/__dirname 且执行后还原', ()
 
 test('runCode 等待脚本返回的异步任务', async () => {
   const host = await runCode(
-    `(async function () {
-      await new Promise(function (resolve) { setTimeout(resolve, 5); });
-      print('done');
-    })();`,
+    `if (typeof module !== 'undefined') {
+      (async function () {
+        await new Promise(function (resolve) { setTimeout(resolve, 5); });
+        print('done');
+      })();
+    }`,
     { ready: true, echo: false },
   );
   assert.deepEqual(host.print, ['done']);
 });
 
-test('runCode 传播 pendingPrints 异步失败', async () => {
+test('runCode 传播脚本异步失败', async () => {
   await assert.rejects(
     runCode(
-      `_host.pendingPrints.push(Promise.reject(new Error('async failed')));`,
+      `Promise.reject(new Error('async failed'));`,
       { ready: true, echo: false },
     ),
     /async failed/,

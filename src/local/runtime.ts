@@ -1,6 +1,5 @@
 export type RuntimeHost = {
   getDownloadUrl(image: unknown, params: unknown): Promise<string>;
-  pendingPrints: Promise<unknown>[];
 };
 
 export type Runtime = typeof globalThis & {

@@ -30,7 +30,6 @@ function annualValidCount(year, targetRegion) {
     .unmask(0)
     .toInt16()
     .clip(china)
-    .reproject({ crs: crs, scale: scale })
     .set({ year: year, 'system:time_start': start.millis() });
 }
 
@@ -128,7 +127,13 @@ if (typeof module !== 'undefined') {
       await pkg.export_img(
         image,
         tileFile,
-        { outdir: tileDir, region: tile.region, retries: 5 },
+        {
+          outdir: tileDir,
+          region: tile.region,
+          crs: crs,
+          scale: scale,
+          retries: 5,
+        },
       );
       return [tileFile];
     } catch (error) {
@@ -190,5 +195,5 @@ if (typeof module !== 'undefined') {
     await runConcurrent(years, yearConcurrency, exportYear);
   }
 
-  _host.pendingPrints.push(main());
+  main();
 }

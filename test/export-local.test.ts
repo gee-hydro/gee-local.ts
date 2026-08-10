@@ -26,6 +26,7 @@ test('export_img 下载已构建的影像', async () => {
     getDownloadUrl(received, params) {
       assert.equal(received, image);
       assert.equal(params.name, 'test');
+      assert.equal(params.scale, 90);
       return Promise.resolve('https://example.test/test.tif');
     },
   };
@@ -35,13 +36,15 @@ test('export_img 下载已构建的影像', async () => {
       image,
       path.join(outdir, 'test.tif'),
       {
-      outdir,
-      log: false,
-      fetch: async () => ({
-        ok: true,
-        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-      }),
-    });
+        outdir,
+        scale: 90,
+        log: false,
+        fetch: async () => ({
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        }),
+      },
+    );
 
     assert.equal(filename, path.join(outdir, 'test.tif'));
     assert.deepEqual([...fs.readFileSync(filename)], [1, 2, 3]);
@@ -50,6 +53,44 @@ test('export_img 下载已构建的影像', async () => {
     else global._host = previousHost;
     fs.rmSync(outdir, { recursive: true, force: true });
   }
+});
+
+test('getDownloadParams 生成 WGS84 网格并优先使用 crsTransform', () => {
+  const region = [73, 18, 136, 54];
+  assert.deepEqual(localExport.getDownloadParams('test', region, {
+    outdir: '/tmp',
+    cellsize: 0.25,
+  }), {
+    name: 'test',
+    format: 'GEO_TIFF',
+    filePerBand: false,
+    crs: 'EPSG:4326',
+    crs_transform: [0.25, 0, 73, 0, -0.25, 54],
+    dimensions: [252, 144],
+  });
+
+  const transform = [463.3127, 0, -20015109, 0, -463.3127, 10007555];
+  assert.deepEqual(localExport.getDownloadParams('modis', region, {
+    outdir: '/tmp',
+    cellsize: 0.25,
+    crs: 'SR-ORG:6974',
+    crsTransform: transform,
+  }), {
+    name: 'modis',
+    region,
+    format: 'GEO_TIFF',
+    filePerBand: false,
+    crs: 'SR-ORG:6974',
+    crs_transform: transform,
+  });
+
+  assert.throws(
+    () => localExport.getDownloadParams('test', {}, {
+      outdir: '/tmp',
+      cellsize: 0.25,
+    }),
+    /cellsize 要求 region/,
+  );
 });
 
 test('export_img 支持切片下载并用 GDAL 合并', async () => {
@@ -110,44 +151,30 @@ test('export_img 支持切片下载并用 GDAL 合并', async () => {
   }
 });
 
-test('export_col 支持自定义并发并注册 gee-helper 异步任务', async () => {
-  const previousPrint = global.print;
-  const previousHost = global._host;
-  const host = { pendingPrints: [] };
-  global._host = host;
+test('export_col 支持自定义并发', async () => {
   const started = [];
   const exported = [];
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
-  global.print = () => {};
+  const pending = localExport.export_col(mockCollection(
+    ['a', 'b', 'c'],
+    ['2024-01-01', '2024-01-02', '2024-01-03'].map(Date.parse),
+  ), {
+    exportImage: async (group) => {
+      started.push(group.key);
+      await gate;
+      exported.push(group.key);
+    },
+    concurrency: 2,
+    outdir: '/tmp/out',
+    log: false,
+  });
 
-  try {
-    const pending = localExport.export_col(mockCollection(
-      ['a', 'b', 'c'],
-      ['2024-01-01', '2024-01-02', '2024-01-03'].map(Date.parse),
-    ), {
-      exportImage: async (group) => {
-        started.push(group.key);
-        await gate;
-        exported.push(group.key);
-      },
-      concurrency: 2,
-      outdir: '/tmp/out',
-      log: false,
-    });
-
-    assert.equal(host.pendingPrints[0], pending);
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(started.join(','), '20240101,20240102');
-    release();
-    await pending;
-    assert.equal(exported.sort().join(','), '20240101,20240102,20240103');
-  } finally {
-    if (previousPrint === undefined) delete global.print;
-    else global.print = previousPrint;
-    if (previousHost === undefined) delete global._host;
-    else global._host = previousHost;
-  }
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(started.join(','), '20240101,20240102');
+  release();
+  await pending;
+  assert.equal(exported.sort().join(','), '20240101,20240102,20240103');
 });
 
 test('export_col 按 properties 写出通用影像记录', async () => {
@@ -317,21 +344,4 @@ test('export_col 拒绝非法周期', async () => {
     localExport.export_col({}, { period: 'weekly' }),
     /period 须为 Nd、Nm 或 Ny/,
   );
-});
-
-test('export_col 向宿主传播异步失败', async () => {
-  const previousHost = global._host;
-  const previousExitCode = process.exitCode;
-  global._host = { pendingPrints: [] };
-
-  try {
-    const pending = localExport.export_col({}, { period: 'weekly' });
-    assert.equal(global._host.pendingPrints[0], pending);
-    await assert.rejects(pending, /period 须为 Nd、Nm 或 Ny/);
-    assert.equal(process.exitCode, 1);
-  } finally {
-    if (previousHost === undefined) delete global._host;
-    else global._host = previousHost;
-    process.exitCode = previousExitCode;
-  }
 });

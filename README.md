@@ -55,7 +55,7 @@ ee --repl
 ee --package-path ./packages script.js
 ```
 
-注入 `ee` / `print` / `Map` / `Export` / `Chart` / `ui.Chart`，以及 Code Editor 风格 `require`（路径须带 `.js`）。本地 `Map.addLayer` 通过 MapLibre GL JS 输出交互式 `maps/<脚本名>.html`，支持图层显隐、透明度、`centerObject`、`setCenter`、`setZoom` 和 `setOptions`；GEE 临时瓦片失效后重新运行脚本即可。本地脚本通过 `_host.getDownloadUrl(image, params)` 获取下载地址，通过 `_host.gdalWarp(args)` 调用 GDAL。逐景并行下载复用 `src/export/export.js`，默认按 `indexProperty` 筛选数据源，也可通过 `groups` 直接下载已选分组。质量筛选由 `src/export/qualityFilter.ts` 独立完成并生成 CSV；`sceneRecord: { filename, properties }` 可同步写出通用影像记录；`maxGroups=-1` 下载全部、`0` 不下载，且影像记录始终覆盖完整集合。`tiling` 可启用切片下载并自动用 GDAL 合并；输出名由 `prefix + 时段键` 生成；可用 `suffixPattern` 从 `system:index` 保留卫星等标识。`period` 支持 `8d`、`1m`、`1y` 等周期（默认 `1d`，日周期自每年 1 月 1 日起算），`concurrency` 默认为 4。
+注入 `ee` / `print` / `Map` / `Export` / `Chart` / `ui.Chart`，以及 Code Editor 风格 `require`（路径须带 `.js`）。本地 `Map.addLayer` 通过 MapLibre GL JS 输出交互式 `maps/<脚本名>.html`，支持图层显隐、透明度、`centerObject`、`setCenter`、`setZoom` 和 `setOptions`；GEE 临时瓦片失效后重新运行脚本即可。本地脚本通过 `_host.getDownloadUrl(image, params)` 获取下载地址，通过 `_host.gdalWarp(args)` 调用 GDAL；单景导出使用 `pkg.export_img`；米制分辨率用 `scale`，规则 WGS84 网格用数值 `region + cellsize`，特殊网格直接传 `crs + crsTransform`。逐景并行下载复用 `src/export/export.js`，默认按 `indexProperty` 筛选数据源，也可通过 `groups` 直接下载已选分组。质量筛选由 `src/export/qualityFilter.ts` 独立完成并生成 CSV；`sceneRecord: { filename, properties }` 可同步写出通用影像记录；`maxGroups=-1` 下载全部、`0` 不下载，且影像记录始终覆盖完整集合。`tiling` 可启用切片下载并自动用 GDAL 合并；输出名由 `prefix + 时段键` 生成；可用 `suffixPattern` 从 `system:index` 保留卫星等标识。`period` 支持 `8d`、`1m`、`1y` 等周期（默认 `1d`，日周期自每年 1 月 1 日起算），`concurrency` 默认为 4。
 
 终端运行脚本时，内置 TypeScript HTTP 服务会自动启动并打开浏览器；按 `Ctrl+C` 关闭。设置 `GEE_MAP_OPEN=0` 可仅输出本地网址，`GEE_MAP_SERVER=0` 可禁用服务。
 

@@ -24,7 +24,6 @@ export interface LocalHost {
   layers: LayerSpec[];
   tasks: TaskSpec[];
   charts: TaskSpec[];
-  pendingPrints: Promise<unknown>[];
   mapRegion?: unknown;
   mapCenter?: [number, number];
   mapZoom?: number;
@@ -33,6 +32,8 @@ export interface LocalHost {
   getDownloadUrl: typeof getDownloadUrl;
   gdalWarp: (args: readonly string[]) => void;
 }
+
+const pendingTasks = new WeakMap<LocalHost, Promise<unknown>[]>();
 
 export interface LocalHostOptions {
   echo?: boolean;
@@ -107,10 +108,10 @@ export function setupLocalHost(opts: LocalHostOptions = {}): LocalHost {
     layers: [],
     tasks: [],
     charts: [],
-    pendingPrints: [],
     getDownloadUrl,
     gdalWarp,
   };
+  pendingTasks.set(host, []);
   const g = globalThis as Record<string, unknown>;
 
   g.ee = ee;
@@ -136,7 +137,7 @@ export function setupLocalHost(opts: LocalHostOptions = {}): LocalHost {
         .join(' ');
       if (echo) console.log('[print]', ...evaluated);
     })();
-    host.pendingPrints.push(p);
+    pendingTasks.get(host)!.push(p);
   };
 
   const origMapCtor = ORIG_MAP_CTOR;
@@ -287,11 +288,16 @@ export interface RunScriptOptions extends LocalHostOptions, ScriptContextOptions
   ready?: boolean;
 }
 
+async function waitForPending(host: LocalHost): Promise<void> {
+  const tasks = pendingTasks.get(host) || [];
+  for (let i = 0; i < tasks.length; i += 1) await tasks[i];
+}
+
 async function runScriptBody(absPath: string, code: string, opts: RunScriptOptions): Promise<LocalHost> {
   const host = setupLocalHost(opts);
   if (!opts.ready) await ensureReady();
   await Promise.resolve(runInScriptContext(code, absPath, opts));
-  await Promise.all(host.pendingPrints);
+  await waitForPending(host);
   host.mapOutput = await renderMap({
     layers: host.layers,
     region: host.mapRegion,
@@ -325,7 +331,7 @@ export async function runCode(code: string, opts: RunScriptOptions = {}): Promis
   if (!opts.ready) await ensureReady();
   const filename = path.join(process.cwd(), '.<gee-inline>.js');
   await Promise.resolve(runInScriptContext(code, filename, opts));
-  await Promise.all(host.pendingPrints);
+  await waitForPending(host);
   host.mapOutput = await renderMap({
     layers: host.layers,
     region: host.mapRegion,

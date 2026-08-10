@@ -5,6 +5,42 @@ import * as util from './utilize.js';
 import { runtime, type RuntimeHost } from '../local/runtime.js';
 import type { DownloadOptions } from './export.js';
 
+function getGridParams(
+  region: unknown,
+  options: DownloadOptions,
+): Record<string, unknown> {
+  if (options.crsTransform) {
+    return {
+      region,
+      ...(options.crs == null ? {} : { crs: options.crs }),
+      crs_transform: options.crsTransform,
+    };
+  }
+  if (options.cellsize == null) {
+    return {
+      region,
+      ...(options.scale == null ? {} : { scale: options.scale }),
+      ...(options.crs == null ? {} : { crs: options.crs }),
+    };
+  }
+
+  const bounds = Array.isArray(region) ? region.map(Number) : [];
+  const cellsize = Number(options.cellsize);
+  if (bounds.length !== 4 || !bounds.every(Number.isFinite) ||
+      !Number.isFinite(cellsize) || cellsize <= 0 ||
+      bounds[0] >= bounds[2] || bounds[1] >= bounds[3]) {
+    throw new Error('cellsize 要求 region 为有效的 [xmin, ymin, xmax, ymax]');
+  }
+  return {
+    crs: 'EPSG:4326',
+    crs_transform: [cellsize, 0, bounds[0], 0, -cellsize, bounds[3]],
+    dimensions: [
+      Math.round((bounds[2] - bounds[0]) / cellsize),
+      Math.round((bounds[3] - bounds[1]) / cellsize),
+    ],
+  };
+}
+
 export function getDownloadParams(
   name: string,
   region: unknown,
@@ -12,9 +48,9 @@ export function getDownloadParams(
 ): Record<string, unknown> {
   return {
     name,
-    region,
     format: options.format || 'GEO_TIFF',
     filePerBand: options.filePerBand || false,
+    ...getGridParams(region, options),
   };
 }
 

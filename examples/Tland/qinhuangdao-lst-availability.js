@@ -87,7 +87,7 @@ if (typeof module !== 'undefined') {
   var path = require('node:path');
   var pkg = require('../dist/index.js');
   var scriptDir = __dirname;
-  var task = pkg.getInfo(rows).then(function (values) {
+  pkg.getInfo(rows).then(function (values) {
     var outdir = path.join(scriptDir, '..', 'data', 'qinhuangdao_lst');
     var filename = path.join(
       outdir,
@@ -127,5 +127,4 @@ if (typeof module !== 'undefined') {
     console.log('[availability] ' + filename);
     console.log('[monthly] ' + monthlyFile);
   });
-  _host.pendingPrints.push(task);
 }
