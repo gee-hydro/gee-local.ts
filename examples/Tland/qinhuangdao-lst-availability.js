@@ -85,14 +85,9 @@ print('可用影像', rows);
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
   var pkg = require('../dist/index.js');
-  var path = pkg.path;
-  var scriptDir = __dirname;
   pkg.getInfo(rows).then(function (values) {
-    var outdir = path.join(scriptDir, '..', 'data', 'qinhuangdao_lst');
-    var filename = path.join(
-      outdir,
-      'Landsat_LST_availability_202601-202609.csv',
-    );
+    var outdir = './data/qinhuangdao_lst';
+    var filename = outdir + '/Landsat_LST_availability_202601-202609.csv';
     fs.mkdirSync(outdir, { recursive: true });
     fs.writeFileSync(filename, [properties].concat(values)
       .map(function (row) { return row.join(','); })
@@ -115,10 +110,7 @@ if (typeof module !== 'undefined') {
         (value[2] / value[0]).toFixed(6),
       ];
     });
-    var monthlyFile = path.join(
-      outdir,
-      'Landsat_LST_monthly_202601-202609.csv',
-    );
+    var monthlyFile = outdir + '/Landsat_LST_monthly_202601-202609.csv';
     fs.writeFileSync(monthlyFile, [
       ['month', 'n', 'mean_frac_cloud', 'mean_frac_valid'],
     ].concat(monthlyRows).map(function (row) {

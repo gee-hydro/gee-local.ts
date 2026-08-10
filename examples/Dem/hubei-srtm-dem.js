@@ -50,20 +50,17 @@ Export.image.toDrive({
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
   var pkg = require('../dist/index.js');
-  var path = pkg.path;
-  var root = path.join(__dirname, '..');
-  var outdir = path.join(root, 'data', 'hubei_dem');
-  var file30m = path.join(outdir, 'Hubei_SRTMGL1_elevation_30m.tif');
-  var file250m = path.join(outdir, 'Hubei_SRTMGL1_elevation_250m.tif');
-  var file1km = path.join(outdir, 'Hubei_SRTMGL1_elevation_1over120deg.tif');
+  var outdir = './data/hubei_dem';
+  var file30m = outdir + '/Hubei_SRTMGL1_elevation_30m.tif';
+  var file250m = outdir + '/Hubei_SRTMGL1_elevation_250m.tif';
+  var file1km = outdir + '/Hubei_SRTMGL1_elevation_1over120deg.tif';
 
-  function tiling(tileBounds, rows, cols, dimensions, dataType, tileCrs) {
+  function tiling(tileBounds, rows, cols, dimensions, dataType) {
     return {
       bounds: tileBounds,
       rows: rows,
       cols: cols,
       dimensions: dimensions,
-      crs: tileCrs,
       resampling: 'near',
       srcNoData: noData,
       dstNoData: noData,
@@ -75,13 +72,15 @@ if (typeof module !== 'undefined') {
     await pkg.export_img_grids(dem1km.toFloat().unmask(noData, false), file1km, {
       outdir: outdir,
       region: hubei,
-      tiling: tiling(bounds, 1, 1, [926, 507], 'Float32', crs),
+      crs: crs,
+      tiling: tiling(bounds, 1, 1, [926, 507], 'Float32'),
     });
     await pkg.export_img_grids(dem30m.toInt16().unmask(noData, false), file30m, {
       outdir: outdir,
       region: hubei,
+      crs: crs,
       retries: 5,
-      tiling: tiling(bounds, 6, 8, [27780, 15210], 'Int16', crs),
+      tiling: tiling(bounds, 6, 8, [27780, 15210], 'Int16'),
     });
     if (!fs.existsSync(file250m)) {
       _host.gdalWarp([
@@ -97,7 +96,7 @@ if (typeof module !== 'undefined') {
         file30m,
         file250m,
       ]);
-      console.log('完成：' + path.basename(file250m));
+      console.log('完成：' + file250m);
     }
   }
 

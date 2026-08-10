@@ -105,6 +105,7 @@ test('export_img_grids 支持切片下载并用 GDAL 合并', async () => {
       path.join(outdir, 'water_20240101.tif'),
       {
         outdir,
+        cellsize: 0.5,
         log: false,
         fetch: async () => ({
           ok: true,
@@ -112,7 +113,7 @@ test('export_img_grids 支持切片下载并用 GDAL 合并', async () => {
         }),
         tiling: {
           bounds: [0, 0, 2, 2],
-          dimensions: [20, 20],
+          crs: 'EPSG:3857',
           rows: 2,
           cols: 2,
         },
@@ -120,7 +121,15 @@ test('export_img_grids 支持切片下载并用 GDAL 合并', async () => {
     );
 
     assert.equal(params.length, 4);
-    assert.equal(JSON.stringify(params[0].region.bounds), '[0,0,1,1]');
+    assert.deepEqual(params[0], {
+      name: 'water_20240101_tile_0',
+      format: 'GEO_TIFF',
+      crs: 'EPSG:3857',
+      crs_transform: [0.5, 0, 0, 0, -0.5, 1],
+      dimensions: [2, 2],
+    });
+    assert.equal(warpArgs[warpArgs.indexOf('-t_srs') + 1], 'EPSG:3857');
+    assert.equal(warpArgs.includes('-ts'), false);
     assert.equal(warpArgs[warpArgs.length - 1], filename);
     assert.equal(fs.readFileSync(filename, 'utf8'), 'merged');
     assert.deepEqual(fs.readdirSync(outdir), ['water_20240101.tif']);

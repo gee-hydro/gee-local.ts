@@ -64,14 +64,9 @@ Export.image.toDrive({
 if (typeof module !== 'undefined') {
   var childProcess = require('node:child_process');
   var pkg = require('../dist/index.js');
-  var path = pkg.path;
-  var scriptDir = __dirname;
-  var root = path.join(scriptDir, '..');
-  var outdir = path.join(root, 'data', 'hubei_water_fraction');
-  var filename = path.join(
-    outdir,
-    'Hubei_JRC_GSW_seasonality_ge2_water_1over120deg.tif',
-  );
+  var outdir = './data/hubei_water_fraction';
+  var filename = outdir +
+    '/Hubei_JRC_GSW_seasonality_ge2_water_1over120deg.tif';
 
   async function saveLocal() {
     await pkg.export_img(exportImage, filename, {
@@ -86,10 +81,10 @@ if (typeof module !== 'undefined') {
     childProcess.execFileSync(
       process.env.RSCRIPT || '/opt/miniforge3/envs/r4.5/bin/Rscript',
       [
-        path.join(scriptDir, 'plot-hubei-water-fraction.R'),
+        './examples/SurfaceWater/plot-hubei-water-fraction.R',
         filename,
-        path.join(root, 'images', 'hubei-frac-water-1over120deg.png'),
-        path.join(root, 'images', 'hubei-water-extent-frac-gt-0.5.png'),
+        './images/hubei-frac-water-1over120deg.png',
+        './images/hubei-water-extent-frac-gt-0.5.png',
       ],
       { stdio: 'inherit' },
     );

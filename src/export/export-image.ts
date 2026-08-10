@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { runtime } from '../local/runtime';
-import type { DownloadOptions } from './export-col';
+import type { DownloadOptions, TilingOptions } from './export-col';
 import { makeTileRegions, mergeTiles } from './export-tile';
 import { log, mapConcurrent } from './utilize';
 
@@ -15,7 +15,8 @@ type GetDownloadUrlGridParams = {
 
 function getGridParams(
   region: unknown,
-  options: DownloadOptions
+  options: DownloadOptions,
+  bounds?: TilingOptions['bounds']
 ): GetDownloadUrlGridParams {
   const params: GetDownloadUrlGridParams = { region };
   if (options.crs != null) params.crs = options.crs;
@@ -28,10 +29,11 @@ function getGridParams(
     return params;
   }
 
-  const [xmin, ymin, xmax, ymax] = region as [number, number, number, number];
+  const [xmin, ymin, xmax, ymax] = bounds ??
+    (region as TilingOptions['bounds']);
   const cellsize = options.cellsize;
   return {
-    crs: 'EPSG:4326',
+    crs: options.crs ?? 'EPSG:4326',
     crs_transform: [cellsize, 0, xmin, 0, -cellsize, ymax],
     dimensions: [
       Math.round((xmax - xmin) / cellsize),
@@ -47,7 +49,8 @@ function retryDelay(attempt: number): Promise<void> {
 async function downloadFile(
   image: unknown,
   filename: string,
-  options: DownloadOptions
+  options: DownloadOptions,
+  bounds?: TilingOptions['bounds']
 ): Promise<string> {
   const host = runtime()._host;
   if (!host) throw new Error('本地导出宿主未初始化');
@@ -55,7 +58,7 @@ async function downloadFile(
   const params = {
     name: path.basename(filename, path.extname(filename)),
     format: options.format ?? 'GEO_TIFF',
-    ...getGridParams(options.region, options)
+    ...getGridParams(options.region, options, bounds)
   };
   const retries = options.retries ?? 3;
   fs.mkdirSync(path.dirname(filename), { recursive: true });
@@ -95,8 +98,10 @@ export async function export_img_grids(
   filename: string,
   options: DownloadOptions
 ): Promise<string> {
+  if (fs.existsSync(filename)) return filename;
   const tiling = options.tiling!;
-  const regions = makeTileRegions(tiling);
+  const crs = options.crs ?? tiling.crs ?? 'EPSG:4326';
+  const regions = makeTileRegions(tiling, crs);
   const name = path.basename(filename, path.extname(filename));
   const outdir = path.dirname(filename);
   const tiles = regions.map((_, index) =>
@@ -107,11 +112,12 @@ export async function export_img_grids(
     await mapConcurrent(
       regions,
       tiling.concurrency ?? regions.length,
-      (region, index) => downloadFile(image, tiles[index],
-        { ...options, region }
+      ({ bounds, region }, index) => downloadFile(image, tiles[index],
+        { ...options, crs, region },
+        bounds
       )
     );
-    mergeTiles(tiles, filename, tiling);
+    mergeTiles(tiles, filename, tiling, crs);
     return filename;
   } finally {
     tiles.forEach((tile) => fs.rmSync(tile, { force: true }));

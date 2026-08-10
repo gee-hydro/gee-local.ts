@@ -144,14 +144,8 @@ Export.image.toDrive({
 if (typeof module !== 'undefined') {
   var childProcess = require('node:child_process');
   var pkg = require('../../dist/index.js');
-  var path = pkg.path;
-  var scriptDir = __dirname;
-  var root = path.join(scriptDir, '..', '..');
-  var outdir = path.join(root, 'data', 'poyang_2020_s1_flood');
-  var filename = path.join(
-    outdir,
-    'Poyang_2020_S1_flood_class_20200714_30m.tif',
-  );
+  var outdir = './data/poyang_2020_s1_flood';
+  var filename = outdir + '/Poyang_2020_S1_flood_class_20200714_30m.tif';
 
   async function saveLocal() {
     await pkg.export_img(exportImage, filename, {
@@ -167,9 +161,9 @@ if (typeof module !== 'undefined') {
     childProcess.execFileSync(
       process.env.RSCRIPT || '/opt/miniforge3/envs/r4.5/bin/Rscript',
       [
-        path.join(scriptDir, 'plot-poyang-2020-s1-flood.R'),
+        './examples/SurfaceWater/plot-poyang-2020-s1-flood.R',
         filename,
-        path.join(root, 'images', 'poyang-2020-s1-flood.png'),
+        './images/poyang-2020-s1-flood.png',
       ],
       { stdio: 'inherit' },
     );

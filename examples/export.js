@@ -5,11 +5,10 @@
  *   DRY_RUN=1 ee examples/export.js
  */
 const pkg = require('../dist');
-const path = pkg.path;
 const { exportBatches } = pkg;
 
 const dryRun = process.env.DRY_RUN === '1';
-const outdir = path.resolve(__dirname, '../cache/examples/smap');
+const outdir = './cache/examples/smap';
 
 // 区域不宜过小：scale=9000 时像素过少会导致 GeoTIFF <1KB 被拒绝
 const opts = {

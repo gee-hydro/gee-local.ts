@@ -40,10 +40,11 @@ export type ExportOptions = GroupOptions & {
 
 export type TilingOptions = {
   bounds: [number, number, number, number];
-  dimensions: [number, number];
+  dimensions?: [number, number];
+  /** @deprecated 使用顶层 DownloadOptions.crs。 */
+  crs?: string;
   rows?: number;
   cols?: number;
-  crs?: string;
   concurrency?: number;
   resampling?: string;
   srcNoData?: number;

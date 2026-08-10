@@ -73,4 +73,5 @@ test/                 离线单测
 - TypeScript 严格类型；使用单引号、分号和 2 空格缩进，不使用尾随逗号
 - 保持 CommonJS 与 CLI 懒加载；`src` 内使用无扩展名导入，统一复用 `src/ee.ts`
 - GEE 包路径须带 `.js`；兼容脚本中，标准 GEE 代码在前，本地专用代码在后
+- 修改 `examples` 前先检索 `src/index.ts` 和相邻示例；通用机制统一复用 `pkg` API
 - 导出时间区间为闭区间，native 模式须提供正 `stepHours`；本地运行与导出遵循 [`docs/local-runtime.md`](docs/local-runtime.md)，相关改动同步更新文档与测试

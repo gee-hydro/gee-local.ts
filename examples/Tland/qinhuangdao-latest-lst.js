@@ -111,16 +111,11 @@ print(ui.Chart.image.histogram({
 if (typeof module !== 'undefined') {
   var childProcess = require('node:child_process');
   var pkg = require('../dist/index.js');
-  var path = pkg.path;
-  var scriptDir = __dirname;
-  var outdir = path.join(scriptDir, '..', 'data', 'qinhuangdao_lst');
+  var outdir = './data/qinhuangdao_lst';
 
   async function saveLocal() {
     var date = await pkg.getInfo(latestLST.date().format('yyyyMMdd'));
-    var filename = path.join(
-      outdir,
-      'Qinhuangdao_Landsat_LST_' + date + '_90m.tif',
-    );
+    var filename = outdir + '/Qinhuangdao_Landsat_LST_' + date + '_90m.tif';
     var image = latestLST
       .reduceResolution({ reducer: ee.Reducer.mean(), maxPixels: 16 })
       .reproject({ crs: 'EPSG:4326', scale: 90 })
@@ -131,9 +126,9 @@ if (typeof module !== 'undefined') {
     childProcess.execFileSync(
       process.env.RSCRIPT || '/opt/miniforge3/envs/r4.5/bin/Rscript',
       [
-        path.join(scriptDir, 'plot-qinhuangdao-lst.R'),
+        './examples/Tland/plot-qinhuangdao-lst.R',
         filename,
-        path.join(scriptDir, '..', 'images', 'qinhuangdao-latest-lst.png'),
+        './images/qinhuangdao-latest-lst.png',
       ],
       { stdio: 'inherit' },
     );

@@ -44,7 +44,7 @@ await pkg.export_img_grids(image, filename, options); // 切片下载并合并
 
 切片下载通过 `tiling` 配置：
 
-- `bounds`、`dimensions`：完整输出网格；
+- `bounds`：完整输出范围；`dimensions`：可选的输出尺寸；
 - `rows`、`cols`：切片行列数；
 - `concurrency`：切片下载并发数；
 - `resampling`、`srcNoData`、`dstNoData`、`dataType`：GDAL 合并参数。
