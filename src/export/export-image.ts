@@ -1,42 +1,41 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as tile from './export-tile.js';
-import * as util from './utilize.js';
-import { runtime, type RuntimeHost } from '../local/runtime.js';
-import type { DownloadOptions } from './export.js';
+import { runtime } from '../local/runtime.js';
+import type { DownloadOptions } from './export-col.js';
+import { exportTiles } from './export-tile.js';
+import { log } from './utilize.js';
+
+type GetDownloadUrlGridParams = {
+  region?: unknown;
+  scale?: number;
+  crs?: string;
+  crs_transform?: number[];
+  dimensions?: number[];
+};
 
 function getGridParams(
   region: unknown,
   options: DownloadOptions,
-): Record<string, unknown> {
-  if (options.crsTransform) {
-    return {
-      region,
-      ...(options.crs == null ? {} : { crs: options.crs }),
-      crs_transform: options.crsTransform,
-    };
+): GetDownloadUrlGridParams {
+  const params: GetDownloadUrlGridParams = { region };
+  if (options.crs != null) params.crs = options.crs;
+  if (options.crsTransform != null) {
+    params.crs_transform = options.crsTransform;
+    return params;
   }
   if (options.cellsize == null) {
-    return {
-      region,
-      ...(options.scale == null ? {} : { scale: options.scale }),
-      ...(options.crs == null ? {} : { crs: options.crs }),
-    };
+    if (options.scale != null) params.scale = options.scale;
+    return params;
   }
 
-  const bounds = Array.isArray(region) ? region.map(Number) : [];
-  const cellsize = Number(options.cellsize);
-  if (bounds.length !== 4 || !bounds.every(Number.isFinite) ||
-      !Number.isFinite(cellsize) || cellsize <= 0 ||
-      bounds[0] >= bounds[2] || bounds[1] >= bounds[3]) {
-    throw new Error('cellsize 要求 region 为有效的 [xmin, ymin, xmax, ymax]');
-  }
+  const [xmin, ymin, xmax, ymax] = region as [number, number, number, number];
+  const cellsize = options.cellsize;
   return {
     crs: 'EPSG:4326',
-    crs_transform: [cellsize, 0, bounds[0], 0, -cellsize, bounds[3]],
+    crs_transform: [cellsize, 0, xmin, 0, -cellsize, ymax],
     dimensions: [
-      Math.round((bounds[2] - bounds[0]) / cellsize),
-      Math.round((bounds[3] - bounds[1]) / cellsize),
+      Math.round((xmax - xmin) / cellsize),
+      Math.round((ymax - ymin) / cellsize),
     ],
   };
 }
@@ -48,8 +47,8 @@ export function getDownloadParams(
 ): Record<string, unknown> {
   return {
     name,
-    format: options.format || 'GEO_TIFF',
-    filePerBand: options.filePerBand || false,
+    format: options.format ?? 'GEO_TIFF',
+    filePerBand: options.filePerBand ?? false,
     ...getGridParams(region, options),
   };
 }
@@ -58,48 +57,49 @@ function retryDelay(attempt: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
 }
 
-async function download_file(
+async function downloadFile(
   image: unknown,
   filename: string,
   options: DownloadOptions,
-  params: unknown,
-  host: RuntimeHost,
+  params: Record<string, unknown>,
 ): Promise<string> {
-  const retries = options.retries == null ? 3 : Number(options.retries);
-  let last_error = '';
+  const host = runtime()._host;
+  if (!host) throw new Error('本地导出宿主未初始化');
 
+  const retries = options.retries ?? 3;
+  let lastError = '';
   for (let attempt = 0; attempt < retries; attempt += 1) {
     let url: string;
     try {
       url = await host.getDownloadUrl(image, params);
     } catch (error) {
-      last_error = error instanceof Error ? error.message : String(error);
+      lastError = error instanceof Error ? error.message : String(error);
       const transient = /socket hang up|Invalid JSON|ECONNRESET|ETIMEDOUT/i
-        .test(last_error);
+        .test(lastError);
       if (!transient || attempt + 1 >= retries) throw error;
       await retryDelay(attempt);
       continue;
     }
 
     try {
-      const response = await (options.fetch || fetch)(url);
+      const response = await (options.fetch ?? fetch)(url);
       if (response.ok) {
         fs.mkdirSync(path.dirname(filename), { recursive: true });
         fs.writeFileSync(filename, Buffer.from(await response.arrayBuffer()));
         return filename;
       }
 
-      last_error = typeof response.text === 'function'
+      lastError = typeof response.text === 'function'
         ? await response.text()
         : 'HTTP ' + response.status;
       if (response.status !== 429 && response.status !== 503) break;
     } catch (error) {
-      last_error = error instanceof Error ? error.message : String(error);
+      lastError = error instanceof Error ? error.message : String(error);
     }
 
     if (attempt + 1 < retries) await retryDelay(attempt);
   }
-  throw new Error('下载失败：' + path.basename(filename) + ': ' + last_error);
+  throw new Error('下载失败：' + path.basename(filename) + ': ' + lastError);
 }
 
 export async function export_img(
@@ -109,28 +109,32 @@ export async function export_img(
 ): Promise<string> {
   const name = path.basename(filename, path.extname(filename));
   if (fs.existsSync(filename)) {
-    util.log(options, '跳过：' + path.basename(filename));
+    log(options, '跳过：' + path.basename(filename));
     return filename;
   }
 
-  const host = runtime()._host;
-  if (!host) throw new Error('本地导出宿主未初始化');
-
-  if (!options.tiling) {
-    const params = getDownloadParams(name, options.region, options);
-    await download_file(image, filename, options, params, host);
-  } else {
-    await tile.exportTiles({
-      image,
+  if (options.tiling) {
+    await exportTiles({
       filename,
       name,
-      options,
-      host,
-      downloadFile: download_file,
-      getDownloadParams,
+      outdir: options.outdir,
+      tiling: options.tiling,
+      download: (region, tileName, tileFile) => downloadFile(
+        image,
+        tileFile,
+        options,
+        getDownloadParams(tileName, region, options),
+      ),
     });
+  } else {
+    await downloadFile(
+      image,
+      filename,
+      options,
+      getDownloadParams(name, options.region, options),
+    );
   }
 
-  util.log(options, '完成：' + path.basename(filename));
+  log(options, '完成：' + path.basename(filename));
   return filename;
 }

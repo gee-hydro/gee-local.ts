@@ -11,14 +11,15 @@ export {
   export_img,
   getDownloadParams,
   listGroups,
-} from './export/export.js';
+} from './export/export-col.js';
 export type {
   Collection,
   DownloadOptions,
   ExportOptions,
   Group,
   GroupOptions,
-} from './export/export.js';
+  TilingOptions,
+} from './export/export-col.js';
 export { mkpath } from './export/utilize.js';
 export { resample, resampleOptions } from './export/resample.js';
 export * as SurfaceWater_HLS from './dataset/SurfaceWater_HLS.js';

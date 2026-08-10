@@ -41,15 +41,11 @@ export function csvCell(value: unknown): string {
 
 export function log(options: LogOptions, message: string): void {
   if (options.log === false) return;
-  (options.log || console.log)(message);
-}
-
-export function pad2(value: number | string): string {
-  return String(value).padStart(2, '0');
+  (options.log ?? console.log)(message);
 }
 
 export function parsePeriod(period?: string): Period {
-  const match = /^(\d+)([dmy])$/i.exec(String(period || '1d'));
+  const match = /^(\d+)([dmy])$/i.exec(String(period ?? '1d'));
   const count = match ? Number(match[1]) : 0;
   if (!match || !Number.isInteger(count) || count < 1) {
     throw new Error('period 须为 Nd、Nm 或 Ny，例如 8d、1m、1y');
@@ -57,7 +53,11 @@ export function parsePeriod(period?: string): Period {
   return { count, unit: match[2].toLowerCase() as Period['unit'] };
 }
 
-export function groupKey(timestamp: number | string, period: Period): string {
+function pad2(value: number | string): string {
+  return String(value).padStart(2, '0');
+}
+
+function groupKey(timestamp: number | string, period: Period): string {
   const date = new Date(Number(timestamp));
   if (!Number.isFinite(date.getTime())) {
     throw new Error('无效的 system:time_start：' + timestamp);
@@ -68,32 +68,34 @@ export function groupKey(timestamp: number | string, period: Period): string {
   const suffix = period.count === 1 ? '' : '_' + period.count + period.unit;
 
   if (period.unit === 'd') {
-    const day_ms = 24 * 60 * 60 * 1000;
-    const year_start = Date.UTC(year, 0, 1);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const yearStart = Date.UTC(year, 0, 1);
     const day = Date.UTC(year, month, date.getUTCDate());
-    const offset = Math.floor((day - year_start) / day_ms / period.count)
+    const offset = Math.floor((day - yearStart) / dayMs / period.count)
       * period.count;
-    const start = new Date(year_start + offset * day_ms);
-    return String(start.getUTCFullYear()) +
-      pad2(start.getUTCMonth() + 1) +
-      pad2(start.getUTCDate()) + suffix;
+    const start = new Date(yearStart + offset * dayMs);
+    return String(start.getUTCFullYear())
+      + pad2(start.getUTCMonth() + 1)
+      + pad2(start.getUTCDate())
+      + suffix;
   }
 
   if (period.unit === 'm') {
-    const absolute_month = year * 12 + month;
-    const start_month = Math.floor(absolute_month / period.count) * period.count;
-    return String(Math.floor(start_month / 12)) +
-      pad2(start_month % 12 + 1) + suffix;
+    const absoluteMonth = year * 12 + month;
+    const startMonth = Math.floor(absoluteMonth / period.count) * period.count;
+    return String(Math.floor(startMonth / 12))
+      + pad2(startMonth % 12 + 1)
+      + suffix;
   }
   return String(Math.floor(year / period.count) * period.count) + suffix;
 }
 
-export function split_group(
+export function splitGroups(
   indices: string[],
   timestamps: Array<number | string>,
   period: Period,
   prefix?: string,
-  suffix_pattern?: RegExp,
+  suffixPattern?: RegExp,
 ): Group[] {
   if (indices.length !== timestamps.length) {
     throw new Error('system:index 与 system:time_start 数量不一致');
@@ -103,7 +105,7 @@ export function split_group(
   const keys: string[] = [];
   indices.forEach((index, i) => {
     let key = groupKey(timestamps[i], period);
-    const match = suffix_pattern && String(index).match(suffix_pattern);
+    const match = suffixPattern && String(index).match(suffixPattern);
     if (match) {
       const suffix = String(match[1] == null ? match[0] : match[1])
         .replace(/[^A-Za-z0-9._-]+/g, '_');
@@ -117,7 +119,28 @@ export function split_group(
   });
   return keys.map((key) => ({
     key,
-    name: String(prefix || '') + key,
+    name: String(prefix ?? '') + key,
     indices: groups[key],
   }));
+}
+
+export async function mapConcurrent<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  task: (item: T, index: number) => R | Promise<R>,
+): Promise<R[]> {
+  let cursor = 0;
+  const results = new Array<R>(items.length);
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await task(items[index], index);
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.min(concurrency, items.length) },
+    worker,
+  ));
+  return results;
 }

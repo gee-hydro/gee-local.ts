@@ -1,5 +1,9 @@
 export type RuntimeHost = {
-  getDownloadUrl(image: unknown, params: unknown): Promise<string>;
+  getDownloadUrl(
+    image: unknown,
+    params: Record<string, unknown>,
+  ): Promise<string>;
+  gdalWarp?(args: readonly string[]): void;
 };
 
 export type Runtime = typeof globalThis & {

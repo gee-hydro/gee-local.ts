@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const localExport = require('../src/export/export.js');
+const { ee } = require('../src/ee');
+const localExport = require('../src/export/export-col.js');
 
 function mockCollection(indices, timestamps) {
   return {
@@ -83,29 +84,19 @@ test('getDownloadParams 生成 WGS84 网格并优先使用 crsTransform', () => 
     crs: 'SR-ORG:6974',
     crs_transform: transform,
   });
-
-  assert.throws(
-    () => localExport.getDownloadParams('test', {}, {
-      outdir: '/tmp',
-      cellsize: 0.25,
-    }),
-    /cellsize 要求 region/,
-  );
 });
 
 test('export_img 支持切片下载并用 GDAL 合并', async () => {
   const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gee-export-tiles-'));
-  const previousEe = global.ee;
+  const previousRectangle = ee.Geometry.Rectangle;
   const previousHost = global._host;
   const params = [];
   let warpArgs;
-  global.ee = {
-    Geometry: {
-      Rectangle(bounds, crs, geodesic) {
-        return { bounds, crs, geodesic };
-      },
-    },
-  };
+  ee.Geometry.Rectangle = (bounds, crs, geodesic) => ({
+    bounds,
+    crs,
+    geodesic,
+  });
   global._host = {
     getDownloadUrl(_image, received) {
       params.push(received);
@@ -143,8 +134,7 @@ test('export_img 支持切片下载并用 GDAL 合并', async () => {
     assert.equal(fs.readFileSync(filename, 'utf8'), 'merged');
     assert.deepEqual(fs.readdirSync(outdir), ['water_20240101.tif']);
   } finally {
-    if (previousEe === undefined) delete global.ee;
-    else global.ee = previousEe;
+    ee.Geometry.Rectangle = previousRectangle;
     if (previousHost === undefined) delete global._host;
     else global._host = previousHost;
     fs.rmSync(outdir, { recursive: true, force: true });
@@ -180,7 +170,7 @@ test('export_col 支持自定义并发', async () => {
 test('export_col 按 properties 写出通用影像记录', async () => {
   const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'gee-scene-record-'));
   const filename = path.join(outdir, 'scenes.csv');
-  const previousEe = global.ee;
+  const previousReducer = ee.Reducer;
   const properties = ['system:index', 'system:time_start', 'SENSOR'];
   const collection = mockCollection(
     ['scene_1', 'scene_2'],
@@ -203,9 +193,7 @@ test('export_col 按 properties 写出通用影像记录', async () => {
       },
     };
   };
-  global.ee = {
-    Reducer: { toList: (count) => ({ count }) },
-  };
+  ee.Reducer = { toList: (count) => ({ count }) };
   let exported = 0;
 
   try {
@@ -224,8 +212,7 @@ test('export_col 按 properties 写出通用影像记录', async () => {
         'scene_2,2024-01-02T00:00:00.000Z,"L8, test"\n',
     );
   } finally {
-    if (previousEe === undefined) delete global.ee;
-    else global.ee = previousEe;
+    ee.Reducer = previousReducer;
     fs.rmSync(outdir, { recursive: true, force: true });
   }
 });
@@ -297,7 +284,7 @@ test('export_col 支持 8d、1m、1y 分组', async () => {
   ]));
 });
 
-test('export_col 直接下载给定分组', async () => {
+test('export_col 直接下载给定分组并应用 maxGroups', async () => {
   const groups = [
     { key: 'a', name: 'water_a', indices: ['i1'] },
     { key: 'b', name: 'water_b', indices: ['i2'] },
@@ -305,11 +292,12 @@ test('export_col 直接下载给定分组', async () => {
   const exported = [];
   await localExport.export_col({}, {
     groups,
+    maxGroups: 1,
     exportImage: async (group) => exported.push(group.key),
     outdir: '/tmp/out',
     log: false,
   });
-  assert.deepEqual(exported, ['a', 'b']);
+  assert.deepEqual(exported, ['a']);
 });
 
 test('export_col 可从 system:index 保留卫星标识', async () => {

@@ -3,10 +3,21 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
+import ts from 'typescript';
 import vm from 'node:vm';
 
-const modulePath = resolve(__dirname, '../src/auth.js');
-const moduleSource = readFileSync(modulePath, 'utf8');
+const modulePath = resolve(__dirname, '../src/auth.ts');
+const moduleSource = ts.transpileModule(
+  readFileSync(modulePath, 'utf8'),
+  {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: modulePath,
+  },
+).outputText;
 const offlineHome = '/offline-home';
 const credentialsPath = `${offlineHome}/.config/earthengine/credentials`;
 const privateKeyPath = `${offlineHome}/.config/earthengine/.private-key.json`;

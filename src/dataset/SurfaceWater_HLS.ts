@@ -1,7 +1,7 @@
 // OPERA DSWx-HLS 水体比例。
 // https://developers.google.com/earth-engine/datasets/catalog/OPERA_DSWX_L3_V1_HLS
 import * as path from 'node:path';
-import { ee } from '../ee.js';
+import { ee } from '../ee';
 import {
   export_col,
   export_img,
@@ -9,7 +9,7 @@ import {
   type Collection,
   type DownloadOptions as ExportDownloadOptions,
   type Group,
-} from '../export/export.js';
+} from '../export/export-col.js';
 import col_frac_valid = require('../export/frac_valid.js');
 import { resample, resampleOptions } from '../export/resample.js';
 
