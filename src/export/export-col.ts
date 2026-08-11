@@ -1,3 +1,4 @@
+import type { ee } from '../ee';
 import { exportTaskInfo } from './taskInfo';
 import {
   evaluate,
@@ -8,7 +9,7 @@ import {
   type Group,
 } from './utilize';
 
-export { export_img, export_img_grids } from './export-image';
+export { export_img, export_img_grids } from './export-img';
 export type { Group };
 
 export type Collection = {
@@ -54,7 +55,10 @@ export type TilingOptions = {
 
 export type DownloadOptions = {
   outdir: string;
-  region?: unknown;
+  /** [xmin, ymin, xmax, ymax]；有 bounds 时自动 region=Rectangle(bounds) */
+  bounds?: [number, number, number, number];
+  /** 非矩形裁剪时用；默认由 bounds 生成 */
+  region?: ee.Geometry;
   format?: string;
   scale?: number;
   cellsize?: number;

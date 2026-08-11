@@ -5,9 +5,10 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ensureReady } from '../auth';
+import type { ee } from '../ee';
+import type { GeeDailyReduction, GeeTemporal } from '../types';
 import { validateCacheBounds, type CacheBounds } from './bounds';
 import { frameCollection } from './frame-collection';
-import type { GeeDailyReduction, GeeTemporal } from '../types';
 
 export type Bucket = 'day' | 'week' | 'month' | 'range';
 
@@ -78,9 +79,11 @@ export function regionGeometry(bounds: CacheBounds): {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function normalizeFrameImage(frame: any): any {
-  return typeof frame?.toBands === 'function' ? frame.toBands() : frame;
+export function normalizeFrameImage(
+  frame: ee.Image | ee.ImageCollection,
+): ee.Image {
+  const col = frame as { toBands?: () => ee.Image };
+  return typeof col.toBands === 'function' ? col.toBands() : frame as ee.Image;
 }
 
 function toIsoCompact(iso: string): string {

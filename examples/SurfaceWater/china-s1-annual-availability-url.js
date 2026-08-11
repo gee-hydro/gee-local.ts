@@ -30,10 +30,7 @@ if (typeof module !== 'undefined') {
   var pkg = require('../../dist/index.js');
   var startYear = Number(process.env.START_YEAR || 2015);
   var endYear = Number(process.env.END_YEAR || 2025);
-  var concurrency = Number(process.env.CONCURRENCY || 1);
-  var tileConcurrency = Number(process.env.TILE_CONCURRENCY || 4);
-  var outdir = process.env.OUTDIR ||
-    './data/china_s1_annual_availability_250m';
+  var outdir = 'data/china_s1_annual_availability_250m';
   var collection = source.filterDate(
     startYear + '-01-01',
     (endYear + 1) + '-01-01'
@@ -42,7 +39,7 @@ if (typeof module !== 'undefined') {
     bounds: bounds,
     rows: 8,
     cols: 14,
-    concurrency: tileConcurrency,
+    concurrency: 4,
     resampling: 'near',
     srcNoData: noData,
     dstNoData: noData,
@@ -66,7 +63,7 @@ if (typeof module !== 'undefined') {
   pkg.export_col(collection, {
     prefix: 'China_S1_IW_VVVH_valid_count_',
     period: '1y',
-    concurrency: concurrency,
+    concurrency: 1,
     exportImage: exportImage
   });
 }

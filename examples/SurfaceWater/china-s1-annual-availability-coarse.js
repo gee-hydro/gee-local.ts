@@ -3,7 +3,7 @@
 
 var cellsize = 0.25;
 var noData = -9999;
-var extent = [73, 18, 136, 54];
+var bounds = [73, 18, 136, 54];
 var china = ee.FeatureCollection('FAO/GAUL/2015/level0')
   .filter(ee.Filter.eq('ADM0_NAME', 'China'))
   .geometry();
@@ -39,7 +39,7 @@ if (typeof module !== 'undefined') {
       year + '_025deg.tif';
     return pkg.export_img(img, filename, {
         outdir: outdir,
-        region: extent,
+        bounds: bounds,
         cellsize: cellsize,
         retries: 3,
       },

@@ -1,45 +1,51 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { ee } from '../ee';
 import { runtime } from '../local/runtime';
 import type { DownloadOptions, TilingOptions } from './export-col';
 import { makeTileRegions, mergeTiles } from './export-tile';
 import { log, mapConcurrent } from './utilize';
 
 type GetDownloadUrlGridParams = {
-  region?: unknown;
+  region?: ee.Geometry;
   scale?: number;
   crs?: string;
   crs_transform?: number[];
   dimensions?: number[];
 };
 
+function regionFromBounds(bounds: TilingOptions['bounds']): ee.Geometry {
+  return ee.Geometry.Rectangle(bounds, 'EPSG:4326', false);
+}
+
 function getGridParams(
-  region: unknown,
   options: DownloadOptions,
   bounds?: TilingOptions['bounds']
 ): GetDownloadUrlGridParams {
-  const params: GetDownloadUrlGridParams = { region };
-  if (options.crs != null) params.crs = options.crs;
-  if (options.crsTransform != null) {
-    params.crs_transform = options.crsTransform;
-    return params;
-  }
-  if (options.cellsize == null) {
-    if (options.scale != null) params.scale = options.scale;
-    return params;
+  const box = bounds ?? options.bounds;
+
+  // cellsize：网格由 transform+dimensions 决定，不需要 region
+  if (options.cellsize != null && options.crsTransform == null) {
+    if (box == null) throw new Error('cellsize 需要 bounds: [xmin, ymin, xmax, ymax]');
+    const [xmin, ymin, xmax, ymax] = box;
+    const cellsize = options.cellsize;
+    return {
+      crs: options.crs ?? 'EPSG:4326',
+      crs_transform: [cellsize, 0, xmin, 0, -cellsize, ymax],
+      dimensions: [
+        Math.round((xmax - xmin) / cellsize),
+        Math.round((ymax - ymin) / cellsize)
+      ]
+    };
   }
 
-  const [xmin, ymin, xmax, ymax] = bounds ??
-    (region as TilingOptions['bounds']);
-  const cellsize = options.cellsize;
-  return {
-    crs: options.crs ?? 'EPSG:4326',
-    crs_transform: [cellsize, 0, xmin, 0, -cellsize, ymax],
-    dimensions: [
-      Math.round((xmax - xmin) / cellsize),
-      Math.round((ymax - ymin) / cellsize)
-    ]
+  const params: GetDownloadUrlGridParams = {
+    region: options.region ?? (box != null ? regionFromBounds(box) : undefined)
   };
+  if (options.crs != null) params.crs = options.crs;
+  if (options.crsTransform != null) params.crs_transform = options.crsTransform;
+  else if (options.scale != null) params.scale = options.scale;
+  return params;
 }
 
 function retryDelay(attempt: number): Promise<void> {
@@ -47,7 +53,7 @@ function retryDelay(attempt: number): Promise<void> {
 }
 
 async function downloadFile(
-  image: unknown,
+  image: ee.Image,
   filename: string,
   options: DownloadOptions,
   bounds?: TilingOptions['bounds']
@@ -58,7 +64,7 @@ async function downloadFile(
   const params = {
     name: path.basename(filename, path.extname(filename)),
     format: options.format ?? 'GEO_TIFF',
-    ...getGridParams(options.region, options, bounds)
+    ...getGridParams(options, bounds)
   };
   const retries = options.retries ?? 3;
   fs.mkdirSync(path.dirname(filename), { recursive: true });
@@ -77,7 +83,7 @@ async function downloadFile(
 }
 
 export async function export_img(
-  image: unknown,
+  image: ee.Image,
   filename: string,
   options: DownloadOptions
 ): Promise<string> {
@@ -94,7 +100,7 @@ export async function export_img(
 
 
 export async function export_img_grids(
-  image: unknown,
+  image: ee.Image,
   filename: string,
   options: DownloadOptions
 ): Promise<string> {

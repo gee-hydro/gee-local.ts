@@ -37,7 +37,7 @@ node bin/ee submit --dry-run \
 ```
 src/
   ee.ts / auth.ts     唯一 EE 实例；鉴权 + getInfo
-  export/             export-col.ts / export-image.ts / export-tile.ts / utilize.ts / batches / tasks
+  export/             export-col.ts / export-img.ts / export-tile.ts / utilize.ts / batches / tasks
   data/               本地 catalog / 日期范围筛选 / Julia worker
   local/              local-host / runtime / gee-require / pkg-add / config
   cli/

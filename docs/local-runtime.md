@@ -49,7 +49,7 @@ await pkg.export_img_grids(image, filename, options); // 切片下载并合并
 - `concurrency`：切片下载并发数；
 - `resampling`、`srcNoData`、`dstNoData`、`dataType`：GDAL 合并参数。
 
-实现位于 `src/export/export-image.ts` 和 `src/export/export-tile.ts`。
+实现位于 `src/export/export-img.ts` 和 `src/export/export-tile.ts`。
 
 ## 逐景与分组导出
 

@@ -2,7 +2,7 @@ import { ee } from '../ee';
 
 export type ResampleOptions = {
   crs: string;
-  region: unknown;
+  region: ee.Geometry;
   crsTransform_source: number[];
   crsTransform_target: number[];
 };
@@ -28,8 +28,7 @@ export function resampleOptions(
   };
 }
 
-// @google/earthengine 无官方类型定义。
-export function resample(mosaic: any, options: ResampleOptions): any {
+export function resample(mosaic: ee.Image, options: ResampleOptions): ee.Image {
   mosaic = mosaic.setDefaultProjection(
     ee.Projection(options.crs),
     options.crsTransform_source,

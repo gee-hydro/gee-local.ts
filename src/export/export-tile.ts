@@ -4,7 +4,7 @@ import type { TilingOptions } from './export-col';
 
 type TileRegion = {
   bounds: TilingOptions['bounds'];
-  region: unknown;
+  region: ee.Geometry;
 };
 
 export function makeTileRegions(

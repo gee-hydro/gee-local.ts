@@ -37,12 +37,13 @@ test('export_img 生成参数并下载影像', async () => {
   });
 
   try {
-    const region = [73, 18, 136, 54];
+    const bounds = [73, 18, 136, 54] as [number, number, number, number];
+    const region = { type: 'Rectangle', bounds };
     const transform = [463.3127, 0, -20015109, 0, -463.3127, 10007555];
     const filename = path.join(outdir, 'test.tif');
     await localExport.export_img(image, filename, {
       outdir,
-      region,
+      bounds,
       cellsize: 0.25,
       log: false,
       fetch: fetchImage
