@@ -5,8 +5,8 @@ import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import * as vm from 'node:vm';
-import { getInfo } from '../auth';
 import { ee } from '../ee';
+import { evaluate } from '../export/utilize';
 import { getDownloadUrl } from './download';
 import { gdalWarp } from './gdal';
 import { renderMap, type MapLayer } from './map';
@@ -75,7 +75,7 @@ async function evalToPlain(v: unknown, depth = 0, seen: WeakSet<object> = new We
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       resolved = await Promise.race([
-        getInfo(obj),
+        evaluate(obj),
         new Promise<never>((_r, rej) => {
           timer = setTimeout(
             () => rej(new Error(`eval timeout ${EVAL_TIMEOUT_MS}ms`)),

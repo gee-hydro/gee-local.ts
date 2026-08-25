@@ -126,7 +126,7 @@ ee data apply --id sm_nc --fn julia/ops/mean_time.jl \
 
 ```ts
 import {
-  ee, getInfo,
+  ee, evaluate,
   exportBatches, submitExportTasks,
   runScript, setupLocalHost,
   addPackage, loadMergedConfig,

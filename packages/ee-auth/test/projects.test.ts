@@ -6,11 +6,10 @@ import { test } from 'node:test';
 
 const skip = !existsSync(`${homedir()}/.config/earthengine/credentials`);
 const src = `
-const { ee, getInfo } = require('ee-auth');
-ee.Initialize(process.argv[1])
-  .then(() => getInfo(ee.Number(1).add(41)))
-  .then((n) => console.log(n))
-  .catch((e) => { console.error(e); process.exit(1); });
+const { ee } = require('ee-auth');
+ee.Initialize(process.argv[1]).then(() => new Promise((res, rej) => {
+  ee.Number(1).add(41).evaluate((n, e) => e ? rej(e) : res(n));
+})).then((n) => console.log(n)).catch((e) => { console.error(e); process.exit(1); });
 `;
 
 test('gee-hydro / gee-kongdd 均可计算 1+41', { skip }, () => {

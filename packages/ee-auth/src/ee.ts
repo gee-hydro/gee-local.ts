@@ -5,10 +5,33 @@ export const ee = require('@google/earthengine');
 export namespace ee {
   /** EE Geometry / GeoJSON；length?: never 拒绝 bounds 四元组 */
   export type Geometry = object & { length?: never };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  export type Array = any;
+  export type Blob = any;
+  export type Classifier = any;
+  export type Clusterer = any;
+  export type Collection = any;
+  export type ComputedObject = any;
+  export type ConfusionMatrix = any;
+  export type Date = any;
+  export type DateRange = any;
+  export type Dictionary = any;
+  export type Element = any;
+  export type Feature = any;
+  export type FeatureCollection = any;
+  export type Filter = any;
   export type Image = any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export type ImageCollection = any;
+  export type Join = any;
+  export type Kernel = any;
+  export type List = any;
+  export type Model = any;
+  export type Number = any;
+  export type PixelType = any;
+  export type Projection = any;
+  export type Reducer = any;
+  export type SelectorSet = any;
+  export type String = any;
 }
 
 const runtime = globalThis as typeof globalThis & { ee?: typeof ee };

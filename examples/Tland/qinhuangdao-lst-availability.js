@@ -85,7 +85,7 @@ print('可用影像', rows);
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
   var pkg = require('../dist/index.js');
-  pkg.getInfo(rows).then(function (values) {
+  pkg.evaluate(rows).then(function (values) {
     var outdir = './data/qinhuangdao_lst';
     var filename = outdir + '/Landsat_LST_availability_202601-202609.csv';
     fs.mkdirSync(outdir, { recursive: true });

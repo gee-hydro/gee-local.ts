@@ -1,11 +1,10 @@
-const { ee, getInfo } = require('..');
+const { ee } = require('..');
 
 async function main() {
   const t0 = Date.now();
   await ee.Initialize();
   console.log(`ee.Initialize ${Date.now() - t0} ms`);
-  const n = await getInfo(ee.Number(1).add(41));
-  console.log(n);
+  console.log(ee.Number(1).add(41).getInfo());
 }
 
 main().catch((err) => {

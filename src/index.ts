@@ -2,7 +2,6 @@ import * as path from 'node:path';
 
 export { path };
 export { ee } from './ee';
-export { getInfo } from './auth';
 export type { GeeDailyReduction, GeeTemporal } from './types';
 
 export { validateCacheBounds, type CacheBounds } from './export/bounds';
@@ -20,7 +19,7 @@ export type {
   GroupOptions,
   TilingOptions,
 } from './export/export-col';
-export { mkpath } from './export/utilize';
+export { evaluate, mkpath } from './export/utilize';
 export { resample, resampleOptions } from './export/resample';
 export * as SurfaceWater_HLS from './dataset/SurfaceWater_HLS';
 export type {

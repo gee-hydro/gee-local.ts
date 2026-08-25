@@ -19,7 +19,6 @@ const algorithmsCachePath = `${cacheDir}/algorithms.json`;
 
 type EeInitModule = {
   Initialize(project?: string): Promise<void>;
-  getInfo<T = unknown>(obj: unknown): Promise<T>;
 };
 
 type FakeFs = {
@@ -81,15 +80,6 @@ function loadAuth(options: LoadOptions): EeInitModule {
   });
   const ee = options.ee as { Initialize: (project?: string) => Promise<void> };
   return { Initialize: (project?: string) => ee.Initialize(project) } as EeInitModule;
-}
-
-function loadUtilize(): Pick<EeInitModule, 'getInfo'> {
-  const ee = { Initialize: async () => undefined };
-  return loadCjs('../src/utilize.ts', (id) => {
-    if (id === './ee') return { ee };
-    if (id === './auth') return {};
-    throw new Error(`unexpected require: ${id}`);
-  }) as Pick<EeInitModule, 'getInfo'>;
 }
 
 class OfflineOAuth2Client {
@@ -332,30 +322,6 @@ test('initialize 失败后清空 readyPromise，下一次 Initialize 会重试',
 
   assert.equal(authTokenSets, 2);
   assert.equal(initializeAttempts, 2);
-});
-
-test('getInfo 求值成功、拒绝无 evaluate 对象并传播 evaluate 错误', async () => {
-  const util = loadUtilize();
-
-  const result = await util.getInfo<{ value: number }>({
-    evaluate: (callback: (value: object) => void) => callback({ value: 42 }),
-  });
-  assert.deepEqual(result, { value: 42 });
-
-  await assert.rejects(util.getInfo({}), /需要 ee\.ComputedObject/);
-
-  const evaluateError = new Error('offline evaluate failed');
-  await assert.rejects(
-    util.getInfo({
-      evaluate: (callback: (value: unknown, error: Error) => void) => {
-        callback(undefined, evaluateError);
-      },
-    }),
-    (error) => {
-      assert.equal(error, evaluateError);
-      return true;
-    },
-  );
 });
 
 test('无凭证时 Initialize 失败', async () => {

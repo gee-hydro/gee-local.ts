@@ -114,7 +114,7 @@ if (typeof module !== 'undefined') {
   var outdir = './data/qinhuangdao_lst';
 
   async function saveLocal() {
-    var date = await pkg.getInfo(latestLST.date().format('yyyyMMdd'));
+    var date = await pkg.evaluate(latestLST.date().format('yyyyMMdd'));
     var filename = outdir + '/Qinhuangdao_Landsat_LST_' + date + '_90m.tif';
     var image = latestLST
       .reduceResolution({ reducer: ee.Reducer.mean(), maxPixels: 16 })

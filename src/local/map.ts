@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getInfo } from '../auth';
 import { ee } from '../ee';
+import { evaluate } from '../export/utilize';
 
 export interface MapLayer {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,7 +86,7 @@ async function regionBounds(
   if (!region) return undefined;
   try {
     const value = typeof (region as { evaluate?: unknown }).evaluate === 'function'
-      ? await getInfo(region)
+      ? await evaluate(region)
       : region;
     const coordinates = (value as { coordinates?: unknown })?.coordinates;
     const bounds: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
