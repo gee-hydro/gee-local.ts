@@ -1,1 +1,1 @@
-export { ensureReady, getInfo } from 'ee-auth';
+export { getInfo } from 'ee-auth';

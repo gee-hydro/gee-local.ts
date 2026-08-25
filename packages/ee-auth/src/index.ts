@@ -1,2 +1,3 @@
 export { ee } from './ee';
-export { ensureReady, getInfo } from './auth';
+import './auth';
+export { getInfo } from './utilize';

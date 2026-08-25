@@ -4,8 +4,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ensureReady } from '../auth';
-import type { ee } from '../ee';
+import { ee } from '../ee';
 import type { GeeDailyReduction, GeeTemporal } from '../types';
 import { validateCacheBounds, type CacheBounds } from './bounds';
 import { frameCollection } from './frame-collection';
@@ -214,7 +213,7 @@ function bucketCacheId(opts: ExportBatchesOptions, bucketStart: string, bucketEn
 }
 
 async function downloadUrl(opts: ExportBatchesOptions, start: string, end: string): Promise<string> {
-  await ensureReady();
+  await ee.Initialize();
   const frame = opts.buildFrame
     ? opts.buildFrame({
         collection: opts.collection, band: opts.band,

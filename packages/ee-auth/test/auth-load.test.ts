@@ -6,18 +6,11 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import vm from 'node:vm';
 
-const modulePath = resolve(__dirname, '../src/auth.ts');
-const moduleSource = ts.transpileModule(
-  readFileSync(modulePath, 'utf8'),
-  {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: modulePath,
-  },
-).outputText;
+const compilerOptions = {
+  esModuleInterop: true,
+  module: ts.ModuleKind.CommonJS,
+  target: ts.ScriptTarget.ES2022,
+};
 const offlineHome = '/offline-home';
 const credentialsPath = `${offlineHome}/.config/earthengine/credentials`;
 const privateKeyPath = `${offlineHome}/.config/earthengine/.private-key.json`;
@@ -26,7 +19,7 @@ const tokenCachePath = `${cacheDir}/access-token.json`;
 const algorithmsCachePath = `${cacheDir}/algorithms.json`;
 
 type EeInitModule = {
-  ensureReady(): Promise<void>;
+  Initialize(): Promise<void>;
   getInfo<T = unknown>(obj: unknown): Promise<T>;
 };
 
@@ -47,26 +40,23 @@ type LoadOptions = {
   eeVersion?: string;
 };
 
-function loadAuth(options: LoadOptions): EeInitModule {
+function loadCjs(
+  file: string,
+  fakeRequire: (id: string) => unknown,
+): Record<string, unknown> {
+  const modulePath = resolve(__dirname, file);
+  const source = ts.transpileModule(
+    readFileSync(modulePath, 'utf8'),
+    { compilerOptions, fileName: modulePath },
+  ).outputText;
   const module = { exports: {} as Record<string, unknown> };
-  const fakeRequire = (id: string): unknown => {
-    if (id === 'node:crypto') return { createHash };
-    if (id === 'node:fs') return options.fs;
-    if (id === './ee') return { ee: options.ee };
-    if (id === 'google-auth-library') return { OAuth2Client: options.OAuth2Client };
-    if (id === '@google/earthengine/package.json') {
-      return { version: options.eeVersion ?? '1.7.37' };
-    }
-    if (id === privateKeyPath && options.privateKey) return options.privateKey;
-    throw new Error(`unexpected require: ${id}`);
-  };
   const context = vm.createContext({
     console: { log: () => undefined },
     Error,
     process: { env: { HOME: offlineHome }, pid: 123, platform: 'linux' },
   });
   const wrapper = vm.runInContext(
-    `(function (exports, require, module, __filename, __dirname) {${moduleSource}\n})`,
+    `(function (exports, require, module, __filename, __dirname) {${source}\n})`,
     context,
     { filename: modulePath },
   ) as (
@@ -76,9 +66,33 @@ function loadAuth(options: LoadOptions): EeInitModule {
     filename: string,
     moduleDirname: string,
   ) => void;
-
   wrapper(module.exports, fakeRequire, module, modulePath, dirname(modulePath));
-  return module.exports as EeInitModule;
+  return module.exports;
+}
+
+function loadAuth(options: LoadOptions): EeInitModule {
+  loadCjs('../src/auth.ts', (id) => {
+    if (id === 'node:crypto') return { createHash };
+    if (id === 'node:fs') return options.fs;
+    if (id === './ee') return { ee: options.ee };
+    if (id === 'google-auth-library') return { OAuth2Client: options.OAuth2Client };
+    if (id === '@google/earthengine/package.json') {
+      return { version: options.eeVersion ?? '1.7.37' };
+    }
+    if (id === privateKeyPath && options.privateKey) return options.privateKey;
+    throw new Error(`unexpected require: ${id}`);
+  });
+  const ee = options.ee as { Initialize: () => Promise<void> };
+  return { Initialize: () => ee.Initialize() } as EeInitModule;
+}
+
+function loadUtilize(): Pick<EeInitModule, 'getInfo'> {
+  const ee = { Initialize: async () => undefined };
+  return loadCjs('../src/utilize.ts', (id) => {
+    if (id === './ee') return { ee };
+    if (id === './auth') return {};
+    throw new Error(`unexpected require: ${id}`);
+  }) as Pick<EeInitModule, 'getInfo'>;
 }
 
 class UnusedOAuth2Client {
@@ -131,7 +145,7 @@ test('service-account 凭证优先，并完成私钥认证与 initialize', async
     privateKey,
   });
 
-  await auth.ensureReady();
+  await auth.Initialize();
 
   assert.equal(authenticatedKey, privateKey);
   assert.equal(initializedProject, 'hydro-project');
@@ -231,7 +245,7 @@ test('OAuth credentials 安装 token refresher、设置 auth token 并完成 ini
   };
   const auth = loadAuth({ fs, ee, OAuth2Client: FakeOAuth2Client });
 
-  await auth.ensureReady();
+  await auth.Initialize();
 
   assert.equal(oauthInstances.length, 1);
   const client = oauthInstances[0];
@@ -269,7 +283,7 @@ test('OAuth credentials 安装 token refresher、设置 auth token 并完成 ini
 
   setAuthTokenArgs = undefined;
   const cachedAuth = loadAuth({ fs, ee, OAuth2Client: FakeOAuth2Client });
-  await cachedAuth.ensureReady();
+  await cachedAuth.Initialize();
 
   assert.equal(oauthInstances.length, 2);
   assert.equal(oauthInstances[1].accessTokenCalls, 0);
@@ -327,14 +341,14 @@ test('算法注册表按 Earth Engine JS 版本缓存', async () => {
     OAuth2Client: UnusedOAuth2Client,
     privateKey,
     eeVersion: '1.0.0',
-  }).ensureReady();
+  }).Initialize();
   await loadAuth({
     fs,
     ee,
     OAuth2Client: UnusedOAuth2Client,
     privateKey,
     eeVersion: '1.0.0',
-  }).ensureReady();
+  }).Initialize();
 
   assert.equal(requests, 1);
   assert.equal(JSON.parse(files.get(algorithmsCachePath) ?? '{}').ee_version, '1.0.0');
@@ -345,13 +359,13 @@ test('算法注册表按 Earth Engine JS 版本缓存', async () => {
     OAuth2Client: UnusedOAuth2Client,
     privateKey,
     eeVersion: '2.0.0',
-  }).ensureReady();
+  }).Initialize();
 
   assert.equal(requests, 2);
   assert.equal(JSON.parse(files.get(algorithmsCachePath) ?? '{}').ee_version, '2.0.0');
 });
 
-test('initialize 失败后清空 readyPromise，下一次 ensureReady 会重试', async () => {
+test('initialize 失败后清空 readyPromise，下一次 Initialize 会重试', async () => {
   const privateKey = { client_email: 'viewer@retry-project.iam.gserviceaccount.com' };
   let authenticationAttempts = 0;
   let initializeAttempts = 0;
@@ -392,55 +406,26 @@ test('initialize 失败后清空 readyPromise，下一次 ensureReady 会重试'
     privateKey,
   });
 
-  await assert.rejects(auth.ensureReady(), /ee\.initialize: temporary failure/);
-  await auth.ensureReady();
+  await assert.rejects(auth.Initialize(), /ee\.initialize: temporary failure/);
+  await auth.Initialize();
 
   assert.equal(authenticationAttempts, 2);
   assert.equal(initializeAttempts, 2);
 });
 
 test('getInfo 求值成功、拒绝无 evaluate 对象并传播 evaluate 错误', async () => {
-  const privateKey = { client_email: 'viewer@evaluate-project.iam.gserviceaccount.com' };
-  const ee = {
-    data: {
-      authenticateViaPrivateKey(
-        _key: object,
-        success: () => void,
-        _failure: (error: unknown) => void,
-      ) {
-        queueMicrotask(success);
-      },
-    },
-    initialize(
-      _baseUrl: unknown,
-      _tileUrl: unknown,
-      success: () => void,
-    ) {
-      queueMicrotask(success);
-    },
-  };
-  const auth = loadAuth({
-    fs: {
-      existsSync: (path) => path === privateKeyPath,
-      readFileSync: () => {
-        throw new Error('credentials should not be read');
-      },
-    },
-    ee,
-    OAuth2Client: UnusedOAuth2Client,
-    privateKey,
-  });
+  const util = loadUtilize();
 
-  const result = await auth.getInfo<{ value: number }>({
+  const result = await util.getInfo<{ value: number }>({
     evaluate: (callback: (value: object) => void) => callback({ value: 42 }),
   });
   assert.deepEqual(result, { value: 42 });
 
-  await assert.rejects(auth.getInfo({}), /需要 ee\.ComputedObject/);
+  await assert.rejects(util.getInfo({}), /需要 ee\.ComputedObject/);
 
   const evaluateError = new Error('offline evaluate failed');
   await assert.rejects(
-    auth.getInfo({
+    util.getInfo({
       evaluate: (callback: (value: unknown, error: Error) => void) => {
         callback(undefined, evaluateError);
       },
@@ -452,7 +437,7 @@ test('getInfo 求值成功、拒绝无 evaluate 对象并传播 evaluate 错误'
   );
 });
 
-test('无凭证时 ensureReady 失败', async () => {
+test('无凭证时 Initialize 失败', async () => {
   const auth = loadAuth({
     fs: {
       existsSync: () => false,
@@ -465,7 +450,7 @@ test('无凭证时 ensureReady 失败', async () => {
   });
 
   await assert.rejects(
-    auth.ensureReady(),
+    auth.Initialize(),
     /无 GEE 凭证/,
   );
 });
@@ -510,7 +495,7 @@ test('OAuth 缺 client 时回退 earthengine CLI 默认值', async () => {
     },
     ee,
     OAuth2Client: FakeOAuth2Client,
-  }).ensureReady();
+  }).Initialize();
 
   assert.equal(
     clientId,

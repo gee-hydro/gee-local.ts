@@ -5,7 +5,6 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ensureReady } from '../auth';
 import { validateCacheBounds, type CacheBounds } from './bounds';
 import { ee } from '../ee';
 import { frameCollection } from './frame-collection';
@@ -180,7 +179,7 @@ export function listJobs(jobDir = DEFAULT_JOB_DIR): string[] {
 
 export async function getTaskStatuses(taskIds: string[]): Promise<TaskStatusView[]> {
   if (taskIds.length === 0) return [];
-  await ensureReady();
+  await ee.Initialize();
   return new Promise((resolve, reject) => {
     asAny(ee).data.getTaskStatus(taskIds, (result: unknown[] | null, err?: string) => {
       if (err) { reject(new Error(String(err))); return; }
@@ -204,7 +203,7 @@ export async function getTaskStatuses(taskIds: string[]): Promise<TaskStatusView
 }
 
 export async function listRecentOperations(limit = 20): Promise<TaskStatusView[]> {
-  await ensureReady();
+  await ee.Initialize();
   return new Promise((resolve, reject) => {
     asAny(ee).data.listOperations(limit, (ops: unknown[] | null, err?: string) => {
       if (err) { reject(new Error(String(err))); return; }
@@ -236,7 +235,7 @@ export async function listRecentOperations(limit = 20): Promise<TaskStatusView[]
 
 export async function cancelTasks(taskIds: string[]): Promise<void> {
   if (taskIds.length === 0) return;
-  await ensureReady();
+  await ee.Initialize();
   await Promise.all(taskIds.map((id) => new Promise<void>((resolve, reject) => {
     asAny(ee).data.cancelTask(id, (_: unknown, err?: string) => {
       if (err) reject(new Error(String(err)));
@@ -306,7 +305,7 @@ export async function submitExportTasks(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let Export: any;
   if (!dryRun) {
-    await ensureReady();
+    await ee.Initialize();
     Export = asAny(ee).batch?.Export ?? asAny(ee).Export;
     if (!Export?.image?.toDrive) {
       throw new Error('ee.batch.Export.image 不可用，请检查 @google/earthengine 版本');

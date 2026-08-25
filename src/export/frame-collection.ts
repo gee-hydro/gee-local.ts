@@ -1,6 +1,6 @@
 /**
  * 导出用帧集合构造（daily_mean / native）。
- * 依赖宿主全局 ee；调用前须 ensureReady() 或已安装 globalThis.ee。
+ * 依赖宿主全局 ee；调用前须 ee.Initialize() 或已安装 globalThis.ee。
  */
 import { ee } from '../ee';
 import type { GeeDailyReduction, GeeTemporal } from '../types';

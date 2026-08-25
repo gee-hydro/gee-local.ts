@@ -12,10 +12,18 @@ npm install && npm run build
 ```
 
 **Auth**（独立包 [`packages/ee-auth`](packages/ee-auth)，其他项目可 `npm install <path>/packages/ee-auth`）
+
+```js
+const { ee } = require('ee-auth');
+await ee.Initialize();
+const col = ee.ImageCollection('NASA/SMAP/SPL4SMGP/008');
+```
+
 - `~/.config/earthengine/.private-key.json`
 - `earthengine authenticate`（OAuth）
 - OAuth access token 缓存于 `${XDG_CACHE_HOME:-~/.cache}/gee-helper/access-token.json`（权限 `600`），未过期则跳过刷新
 - 算法注册表缓存于同目录；命中则 `ee.initialize()` 不再拉取 `getAlgorithms`（版本变化或失效时更新）
+- 本机实测 `ee.Initialize`：双缓存 20 ms；`access-token.json` 省 0.46 s，`algorithms.json` 省 0.84 s
 
 ## CLI
 
@@ -119,7 +127,7 @@ ee data apply --id sm_nc --fn julia/ops/mean_time.jl \
 
 ```ts
 import {
-  ensureReady, getInfo, ee,
+  ee, getInfo,
   exportBatches, submitExportTasks,
   runScript, setupLocalHost,
   addPackage, loadMergedConfig,

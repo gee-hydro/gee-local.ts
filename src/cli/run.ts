@@ -3,7 +3,7 @@
  */
 import * as path from 'node:path';
 import * as readline from 'node:readline';
-import { ensureReady } from '../auth';
+import { ee } from '../ee';
 import {
   closeMapServer,
   openBrowser,
@@ -58,7 +58,7 @@ export async function cmdRun(cli: Cli): Promise<number> {
     return 2;
   }
   const t0 = Date.now();
-  await ensureReady();
+  await ee.Initialize();
   console.log(`[gee] auth ready in ${Date.now() - t0}ms`);
 
   const opts = { ready: true as const, packagePaths: cli.packagePaths };

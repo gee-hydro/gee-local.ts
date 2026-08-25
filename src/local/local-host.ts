@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import * as vm from 'node:vm';
-import { ensureReady, getInfo } from '../auth';
+import { getInfo } from '../auth';
 import { ee } from '../ee';
 import { getDownloadUrl } from './download';
 import { gdalWarp } from './gdal';
@@ -284,7 +284,7 @@ export function runInScriptContext(
 }
 
 export interface RunScriptOptions extends LocalHostOptions, ScriptContextOptions {
-  /** 跳过 ensureReady（批量跑时外层只鉴权一次） */
+  /** 跳过 ee.Initialize（批量跑时外层只鉴权一次） */
   ready?: boolean;
 }
 
@@ -295,7 +295,7 @@ async function waitForPending(host: LocalHost): Promise<void> {
 
 async function runScriptBody(absPath: string, code: string, opts: RunScriptOptions): Promise<LocalHost> {
   const host = setupLocalHost(opts);
-  if (!opts.ready) await ensureReady();
+  if (!opts.ready) await ee.Initialize();
   await Promise.resolve(runInScriptContext(code, absPath, opts));
   await waitForPending(host);
   host.mapOutput = await renderMap({
@@ -313,12 +313,12 @@ export async function runScript(scriptPath: string, opts: RunScriptOptions = {})
   return runScriptBody(absPath, fs.readFileSync(absPath, 'utf8'), opts);
 }
 
-/** 多脚本顺序执行，ensureReady 仅一次。 */
+/** 多脚本顺序执行，ee.Initialize 仅一次。 */
 export async function runScripts(
   scriptPaths: string[],
   opts: RunScriptOptions = {},
 ): Promise<LocalHost[]> {
-  await ensureReady();
+  await ee.Initialize();
   const out: LocalHost[] = [];
   for (const p of scriptPaths) {
     out.push(await runScript(p, { ...opts, ready: true }));
@@ -328,7 +328,7 @@ export async function runScripts(
 
 export async function runCode(code: string, opts: RunScriptOptions = {}): Promise<LocalHost> {
   const host = setupLocalHost(opts);
-  if (!opts.ready) await ensureReady();
+  if (!opts.ready) await ee.Initialize();
   const filename = path.join(process.cwd(), '.<gee-inline>.js');
   await Promise.resolve(runInScriptContext(code, filename, opts));
   await waitForPending(host);

@@ -1,5 +1,5 @@
 /**
- * GEE Node-only 鉴权初始化 + 异步求值封装。
+ * GEE Node-only 鉴权初始化。
  * 优先 service-account（~/.config/earthengine/.private-key.json）
  * 否则 OAuth refresh-token（~/.config/earthengine/credentials）
  */
@@ -41,10 +41,6 @@ type AccessToken = {
 };
 
 type Algorithms = Record<string, unknown>;
-
-type Evaluatable<T> = {
-  evaluate(callback: (result: T, error?: unknown) => void): void;
-};
 
 let readyPromise: Promise<void> | null = null;
 
@@ -142,10 +138,7 @@ function initializeEe(
     if (cached) return callback(cached);
     return original.call(ee.data, (algorithms: Algorithms, error?: unknown) => {
       if (algorithms && !error) {
-        writeCache(ALGORITHMS_CACHE, {
-          ee_version: EE_VERSION,
-          algorithms,
-        });
+        writeCache(ALGORITHMS_CACHE, { ee_version: EE_VERSION, algorithms, });
       }
       callback(algorithms, error);
     });
@@ -169,16 +162,12 @@ function initializeEe(
   };
 
   try {
-    ee.initialize(
-      null,
-      null,
+    ee.initialize(null, null,
       () => {
         restore();
         success();
       },
-      fail,
-      null,
-      project,
+      fail, null, project,
     );
   } catch (error) {
     fail(error);
@@ -203,113 +192,84 @@ async function refreshToken(
   return { token, expiresIn };
 }
 
-/**
- * 初始化 GEE。失败清空内存缓存，允许下次请求重试。
- * OAuth access token 跨进程缓存至 $XDG_CACHE_HOME/gee-helper。
- */
-export function ensureReady(): Promise<void> {
-  if (readyPromise) return readyPromise;
-  readyPromise = new Promise<void>((resolve, reject) => {
-    const fail = (error: unknown): void => {
-      readyPromise = null;
-      reject(error instanceof Error ? error : new Error(String(error)));
-    };
-
-    if (fs.existsSync(PRIVATE_KEY)) {
-      const key = require(PRIVATE_KEY) as PrivateKey;
-      ee.data.authenticateViaPrivateKey(
-        key,
-        () => initializeEe(
-          key.client_email?.split('@')[1]?.split('.')[0],
-          () => {
-            console.log('[gee] ready (service-account)');
-            resolve();
-          },
-          (error: unknown) => fail(new Error(`ee.initialize: ${error}`)),
-        ),
-        (error: unknown) => fail(new Error(`private-key auth: ${error}`)),
-      );
-      return;
-    }
-
-    if (!fs.existsSync(CREDENTIALS)) {
-      fail(new Error(`无 GEE 凭证：${CREDENTIALS} 或 ${PRIVATE_KEY}`));
-      return;
-    }
-
-    const credentials = JSON.parse(
-      fs.readFileSync(CREDENTIALS, 'utf8'),
-    ) as OAuthCredentials;
-    const clientId = credentials.client_id || EE_CLIENT_ID;
-    const client = new OAuth2Client(
-      clientId,
-      credentials.client_secret || EE_CLIENT_SECRET,
+function initEe(project?: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    initializeEe(
+      project,
+      resolve,
+      (error) => reject(new Error(`ee.initialize: ${error}`)),
     );
-    client.setCredentials({ refresh_token: credentials.refresh_token });
-    const id = credentialId(credentials, clientId);
-
-    // Node 无 GIS 弹窗；须自带 refresher，否则 access_token 约 1h 后失效。
-    ee.data.setAuthTokenRefresher((
-      _authArgs: unknown,
-      callback: (response: Record<string, unknown>) => void,
-    ) => {
-      refreshToken(client, id)
-        .then(({ token, expiresIn }) => callback({
-          access_token: token,
-          token_type: 'Bearer',
-          expires_in: expiresIn,
-        }))
-        .catch((error: unknown) => callback({
-          error: 'refresh_token: ' + errorMessage(error),
-        }));
-    });
-
-    const cached = readTokenCache(id);
-    (cached ? Promise.resolve(cached) : refreshToken(client, id))
-      .then(({ token, expiresIn }) => {
-        ee.apiclient.setAuthToken(
-          clientId,
-          'Bearer',
-          token,
-          expiresIn,
-          [],
-          undefined,
-          false,
-        );
-        initializeEe(
-          credentials.project,
-          () => {
-            console.log('[gee] ready (OAuth)');
-            resolve();
-          },
-          (error: unknown) => fail(new Error(`ee.initialize: ${error}`)),
-        );
-      })
-      .catch((error: unknown) => {
-        fail(new Error('refresh_token: ' + errorMessage(error)));
-      });
   });
+}
+
+async function connectPrivateKey(): Promise<void> {
+  const key = require(PRIVATE_KEY) as PrivateKey;
+  await new Promise<void>((resolve, reject) => {
+    ee.data.authenticateViaPrivateKey(
+      key,
+      resolve,
+      (error: unknown) => reject(new Error(`private-key auth: ${error}`)),
+    );
+  });
+  await initEe(key.client_email?.split('@')[1]?.split('.')[0]);
+  console.log('[gee] ready (service-account)');
+}
+
+async function connectOAuth(): Promise<void> {
+  const credentials = JSON.parse(
+    fs.readFileSync(CREDENTIALS, 'utf8'),
+  ) as OAuthCredentials;
+  const clientId = credentials.client_id || EE_CLIENT_ID;
+  const client = new OAuth2Client(
+    clientId,
+    credentials.client_secret || EE_CLIENT_SECRET,
+  );
+  client.setCredentials({ refresh_token: credentials.refresh_token });
+  const id = credentialId(credentials, clientId);
+
+  // Node 无 GIS 弹窗；须自带 refresher，否则 access_token 约 1h 后失效。
+  ee.data.setAuthTokenRefresher((
+    _authArgs: unknown,
+    callback: (response: Record<string, unknown>) => void,
+  ) => {
+    refreshToken(client, id)
+      .then(({ token, expiresIn }) => callback({
+        access_token: token,
+        token_type: 'Bearer',
+        expires_in: expiresIn,
+      }))
+      .catch((error: unknown) => callback({
+        error: 'refresh_token: ' + errorMessage(error),
+      }));
+  });
+
+  try {
+    const { token, expiresIn } = readTokenCache(id) ?? await refreshToken(client, id);
+    ee.apiclient.setAuthToken(
+      clientId, 'Bearer', token, expiresIn, [], undefined, false,
+    );
+  } catch (error) {
+    throw new Error('refresh_token: ' + errorMessage(error));
+  }
+  await initEe(credentials.project);
+  console.log('[gee] ready (OAuth)');
+}
+
+async function connect(): Promise<void> {
+  if (fs.existsSync(PRIVATE_KEY)) return connectPrivateKey();
+  if (fs.existsSync(CREDENTIALS)) return connectOAuth();
+  throw new Error(`无 GEE 凭证：${CREDENTIALS} 或 ${PRIVATE_KEY}`);
+}
+
+/** 对齐 Python `ee.Initialize()`。失败可重试。 */
+function Initialize(): Promise<void> {
+  if (!readyPromise) {
+    readyPromise = connect().catch((error) => {
+      readyPromise = null;
+      throw error instanceof Error ? error : new Error(String(error));
+    });
+  }
   return readyPromise;
 }
 
-function isEvaluatable<T>(object: unknown): object is Evaluatable<T> {
-  return object != null
-    && typeof (object as { evaluate?: unknown }).evaluate === 'function';
-}
-
-/** 将 ee.ComputedObject 异步求值（Promise 版 getInfo）。 */
-export async function getInfo<T = unknown>(object: unknown): Promise<T> {
-  await ensureReady();
-  if (!isEvaluatable<T>(object)) {
-    throw new Error('getInfo: 需要 ee.ComputedObject（含 .evaluate）');
-  }
-  return new Promise<T>((resolve, reject) => {
-    object.evaluate((result, error) => {
-      if (error) {
-        reject(error instanceof Error ? error : new Error(String(error)));
-        return;
-      }
-      resolve(result);
-    });
-  });
-}
+ee.Initialize = Initialize;

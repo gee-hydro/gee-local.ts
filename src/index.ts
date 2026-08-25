@@ -2,7 +2,7 @@ import * as path from 'node:path';
 
 export { path };
 export { ee } from './ee';
-export { ensureReady, getInfo } from './auth';
+export { getInfo } from './auth';
 export type { GeeDailyReduction, GeeTemporal } from './types';
 
 export { validateCacheBounds, type CacheBounds } from './export/bounds';
