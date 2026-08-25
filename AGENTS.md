@@ -4,7 +4,7 @@
 
 `gee-helper` 是独立 CommonJS 包，提供：
 
-- GEE service-account / OAuth 鉴权
+- GEE service-account / OAuth 鉴权（`packages/ee-auth`，亦可独立引用）
 - 本地 GeoTIFF、Google Drive、GCS 批量导出
 - Code Editor 风格 GEE JavaScript 本地运行（`ee script.js`）
 - GEE JS 包管理（`packages/` + `ee add`）
@@ -36,7 +36,7 @@ node bin/ee submit --dry-run \
 
 ```
 src/
-  ee.ts / auth.ts     唯一 EE 实例；鉴权 + getInfo
+  ee.ts / auth.ts     再导出 ee-auth（唯一 EE 实例 + getInfo）
   export/             export-col.ts / export-img.ts / export-tile.ts / utilize.ts / batches / tasks
   data/               本地 catalog / 日期范围筛选 / Julia worker
   local/              local-host / runtime / gee-require / pkg-add / config
@@ -50,7 +50,7 @@ src/
   cli.ts              re-export → dist/cli.js（bin/ee 入口）
   index.ts            公共 API
 julia/                SpatialRasterLite JSON-Lines worker
-packages/             GEE JS 包根（require 须带 .js）
+packages/             GEE JS 包根（require 须带 .js）；ee-auth 为独立 npm 包
 examples/             可运行示例
 test/                 离线单测
 ```
@@ -71,7 +71,7 @@ test/                 离线单测
 ## 修改原则
 
 - TypeScript 严格类型；使用单引号、分号和 2 空格缩进，不使用尾随逗号
-- 保持 CommonJS 与 CLI 懒加载；`src` 内使用无扩展名导入，统一复用 `src/ee.ts`
+- 保持 CommonJS 与 CLI 懒加载；`src` 内使用无扩展名导入，统一复用 `src/ee.ts`（实现在 `packages/ee-auth`）
 - GEE 包路径须带 `.js`；兼容脚本中，标准 GEE 代码在前，本地专用代码在后
 - 修改 `examples` 前先检索 `src/index.ts` 和相邻示例；通用机制统一复用 `pkg` API
 - 导出时间区间为闭区间，native 模式须提供正 `stepHours`；本地运行与导出遵循 [`docs/local-runtime.md`](docs/local-runtime.md)，相关改动同步更新文档与测试

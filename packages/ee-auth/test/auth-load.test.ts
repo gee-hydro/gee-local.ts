@@ -451,3 +451,70 @@ test('getInfo 求值成功、拒绝无 evaluate 对象并传播 evaluate 错误'
     },
   );
 });
+
+test('无凭证时 ensureReady 失败', async () => {
+  const auth = loadAuth({
+    fs: {
+      existsSync: () => false,
+      readFileSync: () => {
+        throw new Error('no files');
+      },
+    },
+    ee: {},
+    OAuth2Client: UnusedOAuth2Client,
+  });
+
+  await assert.rejects(
+    auth.ensureReady(),
+    /无 GEE 凭证/,
+  );
+});
+
+test('OAuth 缺 client 时回退 earthengine CLI 默认值', async () => {
+  const credentials = { refresh_token: 'offline-refresh-token', project: 'p' };
+  let clientId = '';
+  let clientSecret = '';
+  class FakeOAuth2Client {
+    constructor(id: string, secret: string) {
+      clientId = id;
+      clientSecret = secret;
+    }
+    setCredentials() {}
+    async getAccessToken() {
+      return { token: 'tok', res: { data: { expires_in: 1800 } } };
+    }
+  }
+  const ee = {
+    data: { setAuthTokenRefresher() {} },
+    apiclient: { setAuthToken() {} },
+    initialize(
+      _b: unknown,
+      _t: unknown,
+      success: () => void,
+    ) {
+      queueMicrotask(success);
+    },
+  };
+  const files = new Map([[credentialsPath, JSON.stringify(credentials)]]);
+  await loadAuth({
+    fs: {
+      existsSync: (path) => files.has(path),
+      readFileSync: (path) => files.get(path) ?? '',
+      mkdirSync: () => undefined,
+      writeFileSync: (path, data) => { files.set(path, data); },
+      renameSync: (from, to) => {
+        files.set(to, files.get(from) ?? '');
+        files.delete(from);
+      },
+      unlinkSync: (path) => { files.delete(path); },
+    },
+    ee,
+    OAuth2Client: FakeOAuth2Client,
+  }).ensureReady();
+
+  assert.equal(
+    clientId,
+    '517222506229-vsmmajv00ul0bs7p89v5m89qs8eb9359.apps.googleusercontent.com',
+  );
+  assert.equal(clientSecret, 'RUP0RZ6e0pPhDzsqIJ7KlNd1');
+});

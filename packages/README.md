@@ -1,6 +1,7 @@
 # packages
 
-本地 GEE JS 包根目录（默认）。**require 须带 `.js`**：
+本地 GEE JS 包根目录（默认）。**require 须带 `.js`**。
+`ee-auth/` 是独立 npm 包，不是 GEE JS 包。
 
 ```js
 require('region.js')

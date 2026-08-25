@@ -1,0 +1,33 @@
+{
+  "name": "ee-auth",
+  "version": "0.1.0",
+  "description": "GEE Node 快速鉴权：service-account / OAuth + Promise getInfo",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@google/earthengine": "^1.7.36",
+    "google-auth-library": "^10.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.5"
+  }
+}

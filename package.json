@@ -22,21 +22,25 @@
       "default": "./dist/export/batches.js"
     }
   },
+  "workspaces": [
+    "packages/ee-auth"
+  ],
   "files": [
     "dist",
     "README.md",
     "bin"
   ],
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "test": "npm run build && tsx --test test/**/*.test.ts",
-    "test:coverage": "npm run build && c8 --reporter=text --reporter=lcov tsx --test test/**/*.test.ts",
+    "build": "npm run build -w ee-auth && tsc",
+    "typecheck": "npm run typecheck -w ee-auth && tsc --noEmit",
+    "test": "npm run build && tsx --test test/**/*.test.ts packages/ee-auth/test/**/*.test.ts",
+    "test:coverage": "npm run build && c8 --reporter=text --reporter=lcov tsx --test test/**/*.test.ts packages/ee-auth/test/**/*.test.ts",
     "prepare": "npm run build"
   },
   "c8": {
     "include": [
-      "src/**/*"
+      "src/**/*",
+      "packages/ee-auth/src/**/*"
     ],
     "exclude": [
       "src/**/*.d.ts",
@@ -50,8 +54,7 @@
     "all": true
   },
   "dependencies": {
-    "@google/earthengine": "^1.7.36",
-    "google-auth-library": "^10.9.0"
+    "ee-auth": "*"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",

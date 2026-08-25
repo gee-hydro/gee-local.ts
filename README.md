@@ -11,11 +11,11 @@ CLI 入口：`bin/ee`（`ee`）。
 npm install && npm run build
 ```
 
-**Auth**
+**Auth**（独立包 [`packages/ee-auth`](packages/ee-auth)，其他项目可 `npm install <path>/packages/ee-auth`）
 - `~/.config/earthengine/.private-key.json`
 - `earthengine authenticate`（OAuth）
-- OAuth access token 缓存于 `${XDG_CACHE_HOME:-~/.cache}/gee-helper/access-token.json`（权限 `600`）
-- 算法注册表缓存于同目录；仅 `@google/earthengine` 版本变化或缓存失效时更新
+- OAuth access token 缓存于 `${XDG_CACHE_HOME:-~/.cache}/gee-helper/access-token.json`（权限 `600`），未过期则跳过刷新
+- 算法注册表缓存于同目录；命中则 `ee.initialize()` 不再拉取 `getAlgorithms`（版本变化或失效时更新）
 
 ## CLI
 
@@ -168,13 +168,13 @@ npm run test:coverage   # text + coverage/lcov.info
 
 ```bash
 src/
-  ee.js auth.js       唯一 EE 实例；鉴权
+  ee.js auth.js       再导出 ee-auth
   export/             批量导出（local / Drive / GCS）
   data/               本地 catalog / 筛选 / Julia worker
   local/              本地宿主、require、config、add
   cli/                CLI（按命令懒加载，help 不拉 EE）
   index.ts            公共 API
 julia/                SpatialRasterLite worker
-packages/             GEE JS 包根
+packages/             GEE JS 包根；ee-auth 独立 npm 包
 examples/ test/
 ```
