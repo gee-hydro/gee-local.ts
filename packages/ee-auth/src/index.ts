@@ -1,2 +1,5 @@
-export { ee } from './ee';
+import { ee } from './ee';
 import './auth';
+import './print';
+
+export = ee;

@@ -1,1 +1,3 @@
-export { ee } from 'ee-auth';
+import ee = require('ee-auth');
+
+export { ee };

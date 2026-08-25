@@ -1,7 +1,7 @@
 /**
  * 对比有/无磁盘缓存时 ee.Initialize 的耗时。
  * 必须另起进程：同进程里 readyPromise 只会初始化一次。
- * 无本机凭证则跳过，避免 CI 打到 GEE。
+ * 仅 EE_BENCHMARK=1 时运行，避免网络波动影响单测。
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -13,10 +13,10 @@ import { test } from 'node:test';
 const CACHE_DIR = join(homedir(), '.cache/gee-helper');
 const CACHE_FILES = ['access-token.json', 'algorithms.json'];
 const EE_DIR = join(homedir(), '.config/earthengine');
-const hasCredentials = existsSync(join(EE_DIR, 'credentials'));
+const runBenchmark = process.env.EE_BENCHMARK === '1' && existsSync(join(EE_DIR, 'credentials'));
 
 const CHILD = `
-const { ee } = require('ee-auth');
+const ee = require('ee-auth');
 const t = Date.now();
 ee.Initialize()
   .then(() => console.log('READY_MS=' + (Date.now() - t)))
@@ -60,7 +60,7 @@ function removeCache(): void {
   }
 }
 
-test('有缓存时 ee.Initialize 明显更快', { skip: !hasCredentials }, () => {
+test('有缓存时 ee.Initialize 明显更快', { skip: !runBenchmark }, () => {
   measureReadyMs(); // 预热：写出 token / 算法表
   const cachedMs = measureReadyMs();
 

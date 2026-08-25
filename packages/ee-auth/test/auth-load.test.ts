@@ -16,6 +16,7 @@ const credentialsPath = `${offlineHome}/.config/earthengine/credentials`;
 const cacheDir = `${offlineHome}/.cache/gee-helper`;
 const tokenCachePath = `${cacheDir}/access-token.json`;
 const algorithmsCachePath = `${cacheDir}/algorithms.json`;
+const defaultClientId = '517222506229-vsmmajv00ul0bs7p89v5m89qs8eb9359.apps.googleusercontent.com';
 
 type EeInitModule = {
   Initialize(project?: string): Promise<void>;
@@ -384,10 +385,7 @@ test('OAuth 缺 client 时回退 earthengine CLI 默认值', async () => {
     OAuth2Client: FakeOAuth2Client,
   }).Initialize();
 
-  assert.equal(
-    clientId,
-    '517222506229-vsmmajv00ul0bs7p89v5m89qs8eb9359.apps.googleusercontent.com',
-  );
+  assert.equal(clientId, defaultClientId);
   assert.equal(clientSecret, 'RUP0RZ6e0pPhDzsqIJ7KlNd1');
 });
 
@@ -418,4 +416,44 @@ test('Initialize(project) 覆盖 credentials.project', async () => {
     OAuth2Client: OfflineOAuth2Client
   }).Initialize('user-project');
   assert.equal(initializedProject, 'user-project');
+});
+
+test('缓存 token 导致 initialize 401 时 refresh 后重试', async () => {
+  const credentials = { refresh_token: 'offline-refresh-token', project: 'p' };
+  const id = createHash('sha256')
+    .update(`${defaultClientId}\0${credentials.project}\0${credentials.refresh_token}`)
+    .digest('hex');
+  const files = new Map([
+    [credentialsPath, JSON.stringify(credentials)],
+    [tokenCachePath, JSON.stringify({
+      credential_id: id,
+      access_token: 'stale-token',
+      expires_at: Date.now() + 1800_000
+    })]
+  ]);
+  const tokens: unknown[] = [];
+  let attempts = 0;
+  const ee = {
+    data: { setAuthTokenRefresher() {} },
+    apiclient: {
+      setAuthToken(_id: unknown, _type: unknown, token: unknown) {
+        tokens.push(token);
+      }
+    },
+    initialize(
+      _baseUrl: unknown,
+      _tileUrl: unknown,
+      success: () => void,
+      failure: (error: unknown) => void
+    ) {
+      attempts += 1;
+      queueMicrotask(attempts === 1 ? () => failure('401') : success);
+    },
+    reset() {}
+  };
+
+  await loadAuth({ fs: memoryFs(files), ee, OAuth2Client: OfflineOAuth2Client }).Initialize();
+
+  assert.deepEqual(tokens, ['stale-token', 'offline-token']);
+  assert.equal(attempts, 2);
 });

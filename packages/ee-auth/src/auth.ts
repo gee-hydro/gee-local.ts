@@ -219,14 +219,45 @@ async function connect(project?: string): Promise<void> {
   };
   ee.data.setAuthTokenRefresher(refreshAuthToken);
 
-  try {
-    const { token, expiresIn } = readTokenCache(id) ?? await refreshToken(client, id);
+  const cached = readTokenCache(id);
+  const setAuthToken = ({ token, expiresIn }: AccessToken): void => {
     ee.apiclient.setAuthToken(clientId, 'Bearer', token, expiresIn, [], undefined, false);
+  };
+  try {
+    setAuthToken(cached ?? await refreshToken(client, id));
   } catch (error) {
     throw new Error('refresh_token: ' + errorMessage(error));
   }
-  await initializeEe(project || process.env.EE_PROJECT || credentials.project);
+
+  const selectedProject = project || process.env.EE_PROJECT || credentials.project;
+  try {
+    await initializeEe(selectedProject);
+  } catch (error) {
+    if (!cached || !isAuthError(error)) throw error;
+    dropTokenCache();
+    if (typeof ee.reset === 'function') ee.reset();
+    try {
+      setAuthToken(await refreshToken(client, id));
+    } catch (refreshError) {
+      throw new Error('refresh_token: ' + errorMessage(refreshError));
+    }
+    await initializeEe(selectedProject);
+  }
   console.log('[gee] ready (OAuth)');
+}
+
+function isAuthError(error: unknown): boolean {
+  return /invalid authentication|unauthenticated|\b401\b|invalid credentials|unauthorized/i.test(
+    errorMessage(error)
+  );
+}
+
+function dropTokenCache(): void {
+  try {
+    fs.unlinkSync(TOKEN_CACHE);
+  } catch {
+    // 无缓存即可。
+  }
 }
 
 /** 对齐 Python `ee.Initialize(project=...)`。失败可重试。 */

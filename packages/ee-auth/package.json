@@ -13,15 +13,15 @@
   },
   "files": [
     "dist",
-    "scripts",
+    "examples",
     "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/**/*.test.ts",
-    "start": "node scripts/hello.js",
-    "hello": "node scripts/hello.js",
+    "start": "node examples/hello.js",
+    "hello": "node examples/hello.js",
     "prepare": "npm run build"
   },
   "dependencies": {
