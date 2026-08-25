@@ -1,10 +1,10 @@
 # ee-auth
 
-3 行完成 GEE 授权。优先 `~/.config/earthengine/.private-key.json`，否则 OAuth（`earthengine authenticate`）。
+3 行完成 GEE OAuth 授权。首次使用前运行 `earthengine authenticate`。
 
 ```js
 const { ee } = require('ee-auth');
-await ee.Initialize();
+await ee.Initialize();           // 或 ee.Initialize('gee-kongdd') / $EE_PROJECT
 const col = ee.ImageCollection('NASA/SMAP/SPL4SMGP/008');
 ```
 

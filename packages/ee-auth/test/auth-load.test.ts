@@ -13,13 +13,12 @@ const compilerOptions = {
 };
 const offlineHome = '/offline-home';
 const credentialsPath = `${offlineHome}/.config/earthengine/credentials`;
-const privateKeyPath = `${offlineHome}/.config/earthengine/.private-key.json`;
 const cacheDir = `${offlineHome}/.cache/gee-helper`;
 const tokenCachePath = `${cacheDir}/access-token.json`;
 const algorithmsCachePath = `${cacheDir}/algorithms.json`;
 
 type EeInitModule = {
-  Initialize(): Promise<void>;
+  Initialize(project?: string): Promise<void>;
   getInfo<T = unknown>(obj: unknown): Promise<T>;
 };
 
@@ -36,7 +35,6 @@ type LoadOptions = {
   fs: FakeFs;
   ee: object;
   OAuth2Client: new (clientId: string, clientSecret: string) => object;
-  privateKey?: object;
   eeVersion?: string;
 };
 
@@ -79,11 +77,10 @@ function loadAuth(options: LoadOptions): EeInitModule {
     if (id === '@google/earthengine/package.json') {
       return { version: options.eeVersion ?? '1.7.37' };
     }
-    if (id === privateKeyPath && options.privateKey) return options.privateKey;
     throw new Error(`unexpected require: ${id}`);
   });
-  const ee = options.ee as { Initialize: () => Promise<void> };
-  return { Initialize: () => ee.Initialize() } as EeInitModule;
+  const ee = options.ee as { Initialize: (project?: string) => Promise<void> };
+  return { Initialize: (project?: string) => ee.Initialize(project) } as EeInitModule;
 }
 
 function loadUtilize(): Pick<EeInitModule, 'getInfo'> {
@@ -95,62 +92,33 @@ function loadUtilize(): Pick<EeInitModule, 'getInfo'> {
   }) as Pick<EeInitModule, 'getInfo'>;
 }
 
-class UnusedOAuth2Client {
-  constructor() {
-    throw new Error('OAuth2Client should not be constructed');
+class OfflineOAuth2Client {
+  setCredentials() {}
+
+  async getAccessToken() {
+    return { token: 'offline-token', res: { data: { expires_in: 1800 } } };
   }
 }
 
-test('service-account 凭证优先，并完成私钥认证与 initialize', async () => {
-  const privateKey = {
-    client_email: 'viewer@hydro-project.iam.gserviceaccount.com',
-    private_key: 'offline-private-key',
+function memoryFs(files: Map<string, string>): FakeFs {
+  return {
+    existsSync: (path) => files.has(path),
+    readFileSync: (path) => {
+      const value = files.get(path);
+      if (value == null) throw new Error(`missing file: ${path}`);
+      return value;
+    },
+    mkdirSync: () => undefined,
+    writeFileSync: (path, data) => files.set(path, data),
+    renameSync: (from, to) => {
+      const value = files.get(from);
+      if (value == null) throw new Error(`missing file: ${from}`);
+      files.set(to, value);
+      files.delete(from);
+    },
+    unlinkSync: (path) => { files.delete(path); }
   };
-  let authenticatedKey: object | undefined;
-  let initializedProject: string | undefined;
-  let credentialsRead = false;
-  const ee = {
-    data: {
-      authenticateViaPrivateKey(
-        key: object,
-        success: () => void,
-        _failure: (error: unknown) => void,
-      ) {
-        authenticatedKey = key;
-        queueMicrotask(success);
-      },
-    },
-    initialize(
-      _baseUrl: unknown,
-      _tileUrl: unknown,
-      success: () => void,
-      _failure: (error: unknown) => void,
-      _xsrfToken: unknown,
-      project: string,
-    ) {
-      initializedProject = project;
-      queueMicrotask(success);
-    },
-  };
-  const auth = loadAuth({
-    fs: {
-      existsSync: (path) => path === privateKeyPath || path === credentialsPath,
-      readFileSync: () => {
-        credentialsRead = true;
-        throw new Error('OAuth credentials must not be read');
-      },
-    },
-    ee,
-    OAuth2Client: UnusedOAuth2Client,
-    privateKey,
-  });
-
-  await auth.Initialize();
-
-  assert.equal(authenticatedKey, privateKey);
-  assert.equal(initializedProject, 'hydro-project');
-  assert.equal(credentialsRead, false);
-});
+}
 
 test('OAuth credentials 安装 token refresher、设置 auth token 并完成 initialize', async () => {
   const credentials = {
@@ -292,99 +260,58 @@ test('OAuth credentials 安装 token refresher、设置 auth token 并完成 ini
 });
 
 test('算法注册表按 Earth Engine JS 版本缓存', async () => {
-  const privateKey = { client_email: 'viewer@cache-project.iam.gserviceaccount.com' };
+  const credentials = { refresh_token: 'offline-refresh-token', project: 'cache-project' };
   const algorithms = { 'Image.add': { args: [], description: 'add', returns: 'Image' } };
-  const files = new Map<string, string>();
+  const files = new Map([[credentialsPath, JSON.stringify(credentials)]]);
   let requests = 0;
-  const fs: FakeFs = {
-    existsSync: (path) => path === privateKeyPath || files.has(path),
-    readFileSync: (path) => {
-      const value = files.get(path);
-      if (value == null) throw new Error(`missing file: ${path}`);
-      return value;
-    },
-    mkdirSync: () => undefined,
-    writeFileSync: (path, data) => files.set(path, data),
-    renameSync: (from, to) => {
-      const value = files.get(from);
-      if (value == null) throw new Error(`missing file: ${from}`);
-      files.set(to, value);
-      files.delete(from);
-    },
-    unlinkSync: (path) => { files.delete(path); },
-  };
   const ee = {
     data: {
-      authenticateViaPrivateKey(
-        _key: object,
-        success: () => void,
-      ) {
-        queueMicrotask(success);
-      },
+      setAuthTokenRefresher() {},
       getAlgorithms(callback: (value: object) => void) {
         requests += 1;
         callback(algorithms);
-      },
+      }
     },
+    apiclient: { setAuthToken() {} },
     initialize(
       _baseUrl: unknown,
       _tileUrl: unknown,
-      success: () => void,
+      success: () => void
     ) {
       this.data.getAlgorithms(success);
-    },
+    }
   };
+  const options = { fs: memoryFs(files), ee, OAuth2Client: OfflineOAuth2Client };
 
-  await loadAuth({
-    fs,
-    ee,
-    OAuth2Client: UnusedOAuth2Client,
-    privateKey,
-    eeVersion: '1.0.0',
-  }).Initialize();
-  await loadAuth({
-    fs,
-    ee,
-    OAuth2Client: UnusedOAuth2Client,
-    privateKey,
-    eeVersion: '1.0.0',
-  }).Initialize();
+  await loadAuth({ ...options, eeVersion: '1.0.0' }).Initialize();
+  await loadAuth({ ...options, eeVersion: '1.0.0' }).Initialize();
 
   assert.equal(requests, 1);
   assert.equal(JSON.parse(files.get(algorithmsCachePath) ?? '{}').ee_version, '1.0.0');
 
-  await loadAuth({
-    fs,
-    ee,
-    OAuth2Client: UnusedOAuth2Client,
-    privateKey,
-    eeVersion: '2.0.0',
-  }).Initialize();
+  await loadAuth({ ...options, eeVersion: '2.0.0' }).Initialize();
 
   assert.equal(requests, 2);
   assert.equal(JSON.parse(files.get(algorithmsCachePath) ?? '{}').ee_version, '2.0.0');
 });
 
 test('initialize 失败后清空 readyPromise，下一次 Initialize 会重试', async () => {
-  const privateKey = { client_email: 'viewer@retry-project.iam.gserviceaccount.com' };
-  let authenticationAttempts = 0;
+  const credentials = { refresh_token: 'offline-refresh-token', project: 'retry-project' };
+  const files = new Map([[credentialsPath, JSON.stringify(credentials)]]);
+  let authTokenSets = 0;
   let initializeAttempts = 0;
   const ee = {
-    data: {
-      authenticateViaPrivateKey(
-        _key: object,
-        success: () => void,
-        _failure: (error: unknown) => void,
-      ) {
-        authenticationAttempts += 1;
-        queueMicrotask(success);
-      },
+    data: { setAuthTokenRefresher() {} },
+    apiclient: {
+      setAuthToken() {
+        authTokenSets += 1;
+      }
     },
     initialize(
       _baseUrl: unknown,
       _tileUrl: unknown,
       success: () => void,
-      failure: (error: unknown) => void,
+      failure: (error: unknown) => void
     ) {
       initializeAttempts += 1;
       if (initializeAttempts === 1) {
@@ -392,24 +319,18 @@ test('initialize 失败后清空 readyPromise，下一次 Initialize 会重试',
       } else {
         queueMicrotask(success);
       }
-    },
+    }
   };
   const auth = loadAuth({
-    fs: {
-      existsSync: (path) => path === privateKeyPath,
-      readFileSync: () => {
-        throw new Error('credentials should not be read');
-      },
-    },
+    fs: memoryFs(files),
     ee,
-    OAuth2Client: UnusedOAuth2Client,
-    privateKey,
+    OAuth2Client: OfflineOAuth2Client
   });
 
   await assert.rejects(auth.Initialize(), /ee\.initialize: temporary failure/);
   await auth.Initialize();
 
-  assert.equal(authenticationAttempts, 2);
+  assert.equal(authTokenSets, 2);
   assert.equal(initializeAttempts, 2);
 });
 
@@ -446,12 +367,12 @@ test('无凭证时 Initialize 失败', async () => {
       },
     },
     ee: {},
-    OAuth2Client: UnusedOAuth2Client,
+    OAuth2Client: OfflineOAuth2Client,
   });
 
   await assert.rejects(
     auth.Initialize(),
-    /无 GEE 凭证/,
+    /无 GEE OAuth 凭证/,
   );
 });
 
@@ -502,4 +423,33 @@ test('OAuth 缺 client 时回退 earthengine CLI 默认值', async () => {
     '517222506229-vsmmajv00ul0bs7p89v5m89qs8eb9359.apps.googleusercontent.com',
   );
   assert.equal(clientSecret, 'RUP0RZ6e0pPhDzsqIJ7KlNd1');
+});
+
+test('Initialize(project) 覆盖 credentials.project', async () => {
+  let initializedProject: string | undefined;
+  const ee = {
+    data: { setAuthTokenRefresher() {} },
+    apiclient: { setAuthToken() {} },
+    initialize(
+      _b: unknown,
+      _t: unknown,
+      success: () => void,
+      _f: unknown,
+      _x: unknown,
+      project: string,
+    ) {
+      initializedProject = project;
+      queueMicrotask(success);
+    }
+  };
+  const files = new Map([[credentialsPath, JSON.stringify({
+    refresh_token: 'offline-refresh-token',
+    project: 'file-project'
+  })]]);
+  await loadAuth({
+    fs: memoryFs(files),
+    ee,
+    OAuth2Client: OfflineOAuth2Client
+  }).Initialize('user-project');
+  assert.equal(initializedProject, 'user-project');
 });

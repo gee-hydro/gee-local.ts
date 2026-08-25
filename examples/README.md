@@ -1,6 +1,6 @@
 # examples
 
-需 GEE 凭证：`~/.config/earthengine/credentials` 或 `.private-key.json`。
+需先运行 `earthengine authenticate` 完成 GEE 授权。
 
 ```bash
 ./examples/RunALL.sh          # 全量（含本地下载）

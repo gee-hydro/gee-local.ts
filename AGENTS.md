@@ -4,7 +4,7 @@
 
 `gee-helper` 是独立 CommonJS 包，提供：
 
-- GEE service-account / OAuth 鉴权（`packages/ee-auth`，亦可独立引用）
+- GEE OAuth 鉴权（`packages/ee-auth`，亦可独立引用）
 - 本地 GeoTIFF、Google Drive、GCS 批量导出
 - Code Editor 风格 GEE JavaScript 本地运行（`ee script.js`）
 - GEE JS 包管理（`packages/` + `ee add`）

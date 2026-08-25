@@ -13,8 +13,7 @@ import { test } from 'node:test';
 const CACHE_DIR = join(homedir(), '.cache/gee-helper');
 const CACHE_FILES = ['access-token.json', 'algorithms.json'];
 const EE_DIR = join(homedir(), '.config/earthengine');
-const hasCredentials = existsSync(join(EE_DIR, 'credentials'))
-  || existsSync(join(EE_DIR, '.private-key.json'));
+const hasCredentials = existsSync(join(EE_DIR, 'credentials'));
 
 const CHILD = `
 const { ee } = require('ee-auth');
