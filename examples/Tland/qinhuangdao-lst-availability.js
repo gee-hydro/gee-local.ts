@@ -84,7 +84,7 @@ print('可用影像', rows);
 /** 本地 gee-helper：保存查询结果；以上代码可直接复制到 Code Editor。 */
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
-  var pkg = require('../dist/index.js');
+  var pkg = require('gee-helper');
   pkg.evaluate(rows).then(function (values) {
     var outdir = './data/qinhuangdao_lst';
     var filename = outdir + '/Landsat_LST_availability_202601-202609.csv';

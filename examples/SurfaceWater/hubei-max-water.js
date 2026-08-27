@@ -46,7 +46,7 @@ Export.image.toDrive({
 /** 本地 gee-helper：下载 GeoTIFF 并绘图；以上代码可直接复制到 Code Editor。 */
 if (typeof module !== 'undefined') {
   var childProcess = require('node:child_process');
-  var pkg = require('../dist/index.js');
+  var pkg = require('gee-helper');
   var outdir = './data/hubei_max_water';
   var filename = outdir +
     '/Hubei_JRC_GSW_max_extent_1984_2021_1over120deg.tif';

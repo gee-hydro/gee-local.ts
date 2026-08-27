@@ -27,7 +27,7 @@ function annualValidCount(year) {
 }
 
 if (typeof module !== 'undefined') {
-  var pkg = require('../../dist/index.js');
+  var pkg = require('gee-helper');
   var startYear = Number(process.env.START_YEAR || 2015);
   var endYear = Number(process.env.END_YEAR || 2025);
   var outdir = './data/china_s1_annual_availability_025deg';

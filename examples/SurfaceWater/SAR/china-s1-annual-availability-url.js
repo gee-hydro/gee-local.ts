@@ -27,7 +27,7 @@ function annualValidCount(images) {
 
 /** 本地 gee-helper：以上为标准 GEE JavaScript。 */
 if (typeof module !== 'undefined') {
-  var pkg = require('../../dist/index.js');
+  var pkg = require('gee-helper');
   var startYear = Number(process.env.START_YEAR || 2015);
   var endYear = Number(process.env.END_YEAR || 2025);
   var outdir = 'data/china_s1_annual_availability_250m';

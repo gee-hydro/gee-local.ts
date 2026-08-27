@@ -49,7 +49,7 @@ Export.image.toDrive({
 /** 本地 gee-helper 下载；以上代码可直接复制到 Code Editor。 */
 if (typeof module !== 'undefined') {
   var fs = require('node:fs');
-  var pkg = require('../dist/index.js');
+  var pkg = require('gee-helper');
   var outdir = './data/hubei_dem';
   var file30m = outdir + '/Hubei_SRTMGL1_elevation_30m.tif';
   var file250m = outdir + '/Hubei_SRTMGL1_elevation_250m.tif';

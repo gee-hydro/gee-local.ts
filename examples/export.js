@@ -4,7 +4,7 @@
  *   ee examples/export.js
  *   DRY_RUN=1 ee examples/export.js
  */
-const pkg = require('../dist');
+const pkg = require('gee-helper');
 const { exportBatches } = pkg;
 
 const dryRun = process.env.DRY_RUN === '1';

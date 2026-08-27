@@ -1,7 +1,8 @@
 // 鄱阳湖区 2020 年洪水 Sentinel-1 SAR 识别试验。
 // 对比同轨 Sentinel-1B：洪水前 2020-06-20，洪峰期 2020-07-14。
-// 本地运行：node bin/ee examples/SurfaceWater/poyang-2020-s1-flood.js
+// 本地运行：node bin/ee examples/SurfaceWater/SAR/poyang-2020-s1-flood.js
 
+var s1 = require('../s1-water.js');
 var region = ee.Geometry.Rectangle([115.78, 28.36, 116.75, 29.75]);
 var before = ee.Image(
   'COPERNICUS/S1_GRD/S1B_IW_GRDH_1SDV_20200620T101816_20200620T101851_022116_029F8B_298B',
@@ -9,48 +10,6 @@ var before = ee.Image(
 var flood = ee.Image(
   'COPERNICUS/S1_GRD/S1B_IW_GRDH_1SDV_20200714T101817_20200714T101852_022466_02AA36_A270',
 );
-
-function otsu(histogram) {
-  histogram = ee.Dictionary(histogram);
-  var counts = ee.Array(histogram.get('histogram'));
-  var means = ee.Array(histogram.get('bucketMeans'));
-  var size = ee.Number(means.length().get([0]));
-  var total = counts.reduce(ee.Reducer.sum(), [0]).get([0]);
-  var sum = means.multiply(counts)
-    .reduce(ee.Reducer.sum(), [0]).get([0]);
-  var mean = sum.divide(total);
-  var scores = ee.List.sequence(1, size.subtract(1)).map(function (i) {
-    var aCounts = counts.slice(0, 0, i);
-    var aCount = aCounts.reduce(ee.Reducer.sum(), [0]).get([0]);
-    var aMean = means.slice(0, 0, i)
-      .multiply(aCounts)
-      .reduce(ee.Reducer.sum(), [0]).get([0])
-      .divide(aCount);
-    var bCount = total.subtract(aCount);
-    var bMean = sum.subtract(aCount.multiply(aMean)).divide(bCount);
-    return aCount.multiply(aMean.subtract(mean).pow(2))
-      .add(bCount.multiply(bMean.subtract(mean).pow(2)));
-  });
-  return means.slice(0, 0, size.subtract(1)).sort(scores).get([-1]);
-}
-
-function sarScore(image) {
-  return image.select(['VV', 'VH'])
-    .focalMedian({ radius: 30, units: 'meters' })
-    .reduce(ee.Reducer.mean())
-    .rename('sar');
-}
-
-function threshold(image) {
-  var histogram = image.reduceRegion({
-    reducer: ee.Reducer.histogram(255, 0.1),
-    geometry: region,
-    scale: 30,
-    maxPixels: 1e8,
-    tileScale: 4,
-  }).get('sar');
-  return ee.Number(otsu(histogram));
-}
 
 function areaKm2(mask) {
   return ee.Number(ee.Image.pixelArea().rename('area').updateMask(mask)
@@ -63,10 +22,10 @@ function areaKm2(mask) {
     }).get('area')).divide(1e6);
 }
 
-var beforeSar = sarScore(before);
-var floodSar = sarScore(flood);
-var beforeThreshold = threshold(beforeSar);
-var floodThreshold = threshold(floodSar);
+var beforeSar = s1.sarScore(before);
+var floodSar = s1.sarScore(flood);
+var beforeThreshold = s1.threshold(beforeSar, region);
+var floodThreshold = s1.threshold(floodSar, region);
 var valid = beforeSar.mask().and(floodSar.mask())
   .and(ee.Terrain.slope(ee.Image('USGS/SRTMGL1_003')).lt(5));
 var beforeWater = beforeSar.lt(beforeThreshold).and(valid);
@@ -140,10 +99,10 @@ Export.image.toDrive({
   formatOptions: { cloudOptimized: true, noData: noData },
 });
 
-/** 本地 gee-helper：下载 GeoTIFF 并绘图；以上代码可直接复制到 Code Editor。 */
+/** 本地 gee-helper：下载 GeoTIFF 并绘图。 */
 if (typeof module !== 'undefined') {
   var childProcess = require('node:child_process');
-  var pkg = require('../../dist/index.js');
+  var pkg = require('gee-helper');
   var outdir = './data/poyang_2020_s1_flood';
   var filename = outdir + '/Poyang_2020_S1_flood_class_20200714_30m.tif';
 
@@ -161,7 +120,7 @@ if (typeof module !== 'undefined') {
     childProcess.execFileSync(
       process.env.RSCRIPT || '/opt/miniforge3/envs/r4.5/bin/Rscript',
       [
-        './examples/SurfaceWater/plot-poyang-2020-s1-flood.R',
+        './examples/SurfaceWater/SAR/plot-poyang-2020-s1-flood.R',
         filename,
         './images/poyang-2020-s1-flood.png',
       ],

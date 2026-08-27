@@ -24,6 +24,25 @@ function otsu(histogram) {
   return means.slice(0, 0, size.subtract(1)).sort(scores).get([-1]);
 }
 
+function sarScore(image) {
+  return image.select(['VV', 'VH'])
+    .focalMedian({ radius: 30, units: 'meters' })
+    .reduce(ee.Reducer.mean())
+    .rename('sar');
+}
+
+function threshold(image, region, mask) {
+  var histogram = image.updateMask(image.mask().and(mask || ee.Image(1)))
+    .reduceRegion({
+      reducer: ee.Reducer.histogram(255, 0.1),
+      geometry: region,
+      scale: 30,
+      maxPixels: 1e8,
+      tileScale: 4,
+    }).get('sar');
+  return ee.Number(otsu(histogram));
+}
+
 function source(region, start, end) {
   return ee.ImageCollection('COPERNICUS/S1_GRD')
     .filterBounds(region)
@@ -45,21 +64,9 @@ function buildWater(src, spec, opt) {
       return image.clipToBoundsAndScale({ geometry: clip, scale: 30 });
     });
   var projection = ee.Image(images.first()).select('VV').projection();
-  var sar = images.mosaic()
-    .setDefaultProjection(projection)
-    .select(['VV', 'VH'])
-    .focalMedian({ radius: 30, units: 'meters' })
-    .reduce(ee.Reducer.mean())
-    .rename('sar');
-  var histogram = sar.updateMask(sar.mask().and(opt.thresholdMask)).reduceRegion({
-    reducer: ee.Reducer.histogram(255, 0.1),
-    geometry: opt.region,
-    scale: 30,
-    maxPixels: 1e8,
-    tileScale: 4,
-  }).get('sar');
-  var threshold = ee.Number(otsu(histogram));
-  var candidate = sar.lt(threshold).and(opt.terrainMask);
+  var sar = sarScore(images.mosaic().setDefaultProjection(projection));
+  var waterThreshold = threshold(sar, opt.region, opt.thresholdMask);
+  var candidate = sar.lt(waterThreshold).and(opt.terrainMask);
   var connected = candidate.selfMask()
     .connectedPixelCount(100, true)
     .gte(8)
@@ -75,7 +82,7 @@ function buildWater(src, spec, opt) {
     .set({
       date: date,
       orbit: orbit,
-      otsu_threshold_db: threshold,
+      otsu_threshold_db: waterThreshold,
       'system:index': date.replace(/-/g, '') + '_R' + orbit,
       'system:time_start': ee.Date(date).millis(),
     });
@@ -88,7 +95,7 @@ function collection(src, acquisitions, opt) {
 }
 
 function export90m(col, opt) {
-  var pkg = require('../../dist/index.js');
+  var pkg = require('gee-helper');
   var tiling = {
     bounds: opt.exportBounds,
     rows: 2,
@@ -126,4 +133,10 @@ function export90m(col, opt) {
   });
 }
 
-module.exports = { source: source, collection: collection, export90m: export90m };
+module.exports = {
+  sarScore: sarScore,
+  threshold: threshold,
+  source: source,
+  collection: collection,
+  export90m: export90m,
+};

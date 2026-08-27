@@ -48,7 +48,7 @@ function monthlyValidDays(images, key) {
 
 /** 本地 gee-helper：以上为标准 GEE JavaScript。 */
 if (typeof module !== 'undefined') {
-  var pkg = require('../../dist/index.js');
+  var pkg = require('gee-helper');
   var startYear = Number(process.env.START_YEAR || 2023);
   var endYear = Number(process.env.END_YEAR || 2026);
   var concurrency = Number(process.env.CONCURRENCY || 1);
